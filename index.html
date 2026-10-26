@@ -1939,6 +1939,8 @@ const WSJ = { 5: [1, 16], 6: [29], 7: [22], 8: [10], 9: [16], 10: [31], 11: [24]
 /* ===== Silke: tăng nhẹ sức mạnh (áp dụng 1 lần, lưu cờ silkeBoost trong file save) ===== */
 const SILKE_BOOST = { str: 2, skl: 2, spd: 2, def: 2, mag: 3, lck: 2, mhp: 6 };
 const SILKE_GROWTH_BONUS = 20; // +20% tỷ lệ tăng mỗi chỉ số khi Silke lên cấp
+const PLAYER_GROWTH_BONUS = 25; // +25% tỷ lệ tăng mỗi chỉ số khi phe ta lên cấp
+const PLAYER_GROWTH_HP = 35;    // +35% tỷ lệ tăng Máu khi phe ta lên cấp (mỗi lần tăng +3 Máu)
 const isSilke = u => !!u && u.team !== 2 && /silke/i.test(u.name || '');
 function boostSilke(u) {
   if (!isSilke(u) || u.silkeBoost) return;
@@ -1957,6 +1959,10 @@ function mkU(r, team) {
     done: false
   };
   u.name = uname(u.id, team);
+  if (team === 1) { // Lính trung lập (Dân quân): trâu hơn hẳn để không chết sau 1-2 đòn
+    u.mhp = Math.floor(u.mhp * 1.6) + 10; u.hp = u.mhp;
+    u.def += 3; u.str += 2; u.skl += 2; u.spd += 1;
+  }
   return u;
 }
 
@@ -2119,7 +2125,6 @@ function swing(a, w, d) {
       }
       if (triple) {
         setTimeout(() => AudioSystem.sfx.triple(), dl);
-        FX.push({ x: d.x, y: d.y, t: 'Tam Liên Kích!', c: '#fb923c', ts: now, big: true, dy: 16 });
         log('{{bolt}} ' + a.name + ' tung <b class="crit-n">Tam Liên Chí Mạng</b>!', dl + 100);
       }
     }
@@ -2147,7 +2152,10 @@ function swing(a, w, d) {
     d.hl.push({ t: t1, hp: d.hp });
     d.flash = t1;
 
-    FX.push({ x: d.x, y: d.y, t: '-' + dm, c: crit ? '#fbbf24' : '#ef4444', ts: t1, big: crit, crit });
+    // Tam Liên: 3 con số xếp chồng lên nhau, tồn tại lâu hơn để cùng thấy đủ 3 phát
+    FX.push(triple
+      ? { x: d.x, y: d.y, t: '-' + dm, c: '#fbbf24', ts: t1, big: true, crit: true, dy: k * 22, dx: (k - 1) * 12, life: 2300 }
+      : { x: d.x, y: d.y, t: '-' + dm, c: crit ? '#fbbf24' : '#ef4444', ts: t1, big: crit, crit });
     burst(d.x, d.y, crit ? '#f59e0b' : '#ef4444', crit ? 32 : 14, t1, crit ? 110 : 70);
 
     if (crit) {
@@ -2220,11 +2228,17 @@ function gain(u, e) {
     u.lv++;
     const g = D.GR[CAT(u.job)], ks = ['str', 'skl', 'spd', 'def', 'mag', 'lck', 'mhp', 'mov'], up = [];
     ks.forEach((k, i) => {
-      if (i < 7 && Math.random() * 100 < g[i] + (isSilke(u) ? SILKE_GROWTH_BONUS : 0)) {
-        u[k] += (k == 'mhp' ? 2 : 1);
+      if (i < 7 && Math.random() * 100 < g[i] + (u.team !== 2 ? (i == 6 ? PLAYER_GROWTH_HP : PLAYER_GROWTH_BONUS) : 0) + (isSilke(u) ? SILKE_GROWTH_BONUS : 0)) {
+        u[k] += (k == 'mhp' ? (u.team !== 2 ? 3 : 2) : 1);
         up.push(k);
       }
     });
+    // Phe ta luôn nhận ít nhất 2 chỉ số mỗi lần lên cấp (tránh lên cấp trắng tay)
+    while (up.length < 2 && u.team !== 2) {
+      const pool = ks.slice(0, 7).filter(x => !up.includes(x));
+      const k = pool[rnd(pool.length)];
+      u[k] += (k == 'mhp' ? 3 : 1); up.push(k);
+    }
     const t = performance.now() + LD;
     // Lên cấp = hồi đầy HP ngay lập tức (thanh máu tăng đúng lúc hiện "Lên cấp!")
     let healed = false;
@@ -2762,9 +2776,9 @@ function arena() {
     p.arenaFights = (p.arenaFights || 0) + 1;
 
     const j = [5, 9, 8, 7, 10][rnd(5)], ws = { 5: [1], 9: [16], 8: [10], 7: [22], 10: [31] };
-    const lv = Math.max(1, p.lv + 1);
-    const a = JSON.parse(JSON.stringify(p)); a.hp = a.mhp; a.x = 1; a.y = 1; a.team = 0;
-    const e = spawn(j, lv, 2, 1, 2, 60, [ws[j][0]]); e.name = 'Võ Sĩ Đấu Trường'; e.mhp += 6; e.hp = e.mhp;
+    const lv = Math.max(1, p.lv); // địch cùng cấp (trước đây hơn 1 cấp)
+    const a = JSON.parse(JSON.stringify(p)); a.mhp += Math.ceil(a.mhp * 0.25); a.def += 1; a.hp = a.mhp; a.x = 1; a.y = 1; a.team = 0;
+    const e = spawn(j, lv, 2, 1, 2, 60, [ws[j][0]]); e.name = 'Võ Sĩ Đấu Trường'; e.mhp = Math.max(5, Math.floor(e.mhp * 0.85)); e.str = Math.max(0, e.str - 1); e.hp = e.mhp;
     const save = { U, MAP };
     MAP = { w: 4, h: 4, t: new Array(16).fill(25) };
     U = [a, e];
@@ -2779,7 +2793,7 @@ function arena() {
 
     const win = a.hp > 0 && e.hp > 0 ? a.hp >= e.hp : a.hp > 0;
     const prize = win ? Math.floor(fee * 1.7) : 0;
-    let exp = win ? Math.max(12, Math.floor((38 + (lv - p.lv) * 4) / Math.max(1, p.arenaFights))) : 0;
+    let exp = win ? Math.max(30, Math.floor(80 / (1 + 0.3 * (p.arenaFights - 1)))) : 10; // thắng nhiều EXP hơn, thua vẫn có EXP an ủi
 
     if (win) {
       G.gold += prize;
@@ -2788,13 +2802,13 @@ function arena() {
       G.stats.arenaWins = (G.stats.arenaWins || 0) + 1;
       AchievementSystem.check();
     } else {
-      p.hp = 1;
+      gain(p, exp); // không còn trừ HP vĩnh viễn khi thua
     }
     U = save.U; MAP = save.MAP;
     openBox(
       '<h3>' + (win ? '{{trophy}} Thắng Đấu Trường!' : '{{skull}} Thất Bại Đấu Trường') + '</h3>' +
       '<p>' + p.name + ' so tài cùng ' + e.name + ' (Cấp ' + (lv + 1) + ').</p>' +
-      '<p>' + (win ? 'Thưởng: +' + prize + ' Vàng (lãi ' + (prize - fee) + 'v), +' + exp + ' Kinh nghiệm!' : 'Bị đánh bại! Mất ' + fee + ' Vàng tiền phí, sinh lực giảm còn 1.') + '</p>' +
+      '<p>' + (win ? 'Thưởng: +' + prize + ' Vàng (lãi ' + (prize - fee) + 'v), +' + exp + ' Kinh nghiệm!' : 'Bị đánh bại! Mất ' + fee + ' Vàng tiền phí, nhưng học được +' + exp + ' Kinh nghiệm. Sinh lực không bị ảnh hưởng.') + '</p>' +
       '<button id="x" class="btn pri">Tiếp tục</button>'
     );
     $('#x').onclick = () => arena();
@@ -3268,11 +3282,11 @@ function draw(ts) {
     cx.globalAlpha = 1;
 
     // Floating combat text
-    FX = FX.filter(f => ts - f.ts < 1300);
+    FX = FX.filter(f => ts - f.ts < (f.life || 1300));
     cx.textAlign = 'center';
     FX.forEach(f => {
       if (ts < f.ts) return;
-      const a = (ts - f.ts) / 1300;
+      const a = (ts - f.ts) / (f.life || 1300);
       const y = f.y * T - 4 - a * (f.big ? 12 : 24) - (f.dy || 0);
       cx.globalAlpha = Math.min(1, (1 - a) * 1.6);
       cx.lineWidth = 3; cx.strokeStyle = '#000000';
@@ -3280,7 +3294,7 @@ function draw(ts) {
         cx.save();
         cx.lineJoin = 'round';
         cx.font = 'bold 20px "Be Vietnam Pro", sans-serif';
-        const tw = cx.measureText(f.t).width, r = 12, x0 = f.x * T + T / 2 - (r * 2 + 4 + tw) / 2;
+        const tw = cx.measureText(f.t).width, r = 12, x0 = f.x * T + T / 2 + (f.dx || 0) - (r * 2 + 4 + tw) / 2;
         const pop = 1 + Math.max(0, 1 - (ts - f.ts) / 160) * 0.7, sx = x0 + r, sy = y - 7;
         const spike = (rr, n) => {
           cx.beginPath();
