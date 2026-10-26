@@ -1661,6 +1661,24 @@ const en = () => U.filter(u => u.hp > 0 && u.team == 2);
 const avgLv = () => Math.max(1, Math.round(pl().reduce((s, u) => s + u.lv, 0) / Math.max(1, pl().length)));
 const WSJ = { 5: [1, 16], 6: [29], 7: [22], 8: [10], 9: [16], 10: [31], 11: [24], 12: [12] };
 
+function applySilkeBuff(u) {
+  if (u.id === 5 || (u.name && u.name.includes('Silke'))) {
+    if (!u._silkeBuffed) {
+      u._silkeBuffed = true;
+      u.str += 2; // Tăng 1 tí sức mạnh (+2)
+      u.mag += 3; // Tăng phép thuật (+3)
+      u.spd += 2; // Tăng tốc độ (+2)
+      u.def += 2; // Tăng phòng ngự (+2)
+      u.mhp += 4; // Tăng 4 HP
+      u.hp = u.mhp;
+      u.mask = (u.mask || 32) | 16; // Cho phép dùng cả phép thuật tấn công
+      if (!u.inv.some(i => iT(i.id) === 16)) {
+        u.inv.push({ id: 22, u: 35 }); // Trang bị Phép Hỏa Cầu
+      }
+    }
+  }
+}
+
 function mkU(r, team) {
   const u = {
     id: r.w, job: r.ab, lv: r.ac, team,
@@ -1671,6 +1689,7 @@ function mkU(r, team) {
     done: false
   };
   u.name = uname(u.id, team);
+  applySilkeBuff(u);
   return u;
 }
 
@@ -1807,10 +1826,10 @@ function burst(x, y, c, n, t0, sp) {
   }
 }
 
-function swing(a, w, d) {
+function swing(a, w, d, forceCrit = false) {
   if (!w || a.hp <= 0) return;
-  const hit = BalanceSystem.trueHitRNG(hitR(a, w, d));
-  const crit = hit && (Math.random() * 100 < critR(a, w));
+  const hit = forceCrit ? true : BalanceSystem.trueHitRNG(hitR(a, w, d));
+  const crit = forceCrit ? true : (hit && (Math.random() * 100 < critR(a, w)));
   const dl = AD++ * 520, now = performance.now() + dl;
   const ty = iT(w.id), rg = iS(w.id)[4] > 1;
 
@@ -1888,10 +1907,46 @@ function battle(a, d) {
   if (f.dbl) seq.push('a');
   else if (f.ddbl) seq.push('d');
 
-  for (const s of seq) {
-    if (a.hp <= 0 || d.hp <= 0) break;
-    if (s === 'a') swing(a, w, d);
-    else swing(d, dw, a);
+  // Tính năng: Các nhân vật phe ta có tỷ lệ nhỏ sẽ đánh 3 phát chí mạng liên tục!
+  const aIsPlayer = (a.team === 0);
+  const aTripleChance = aIsPlayer ? Math.max(8, Math.min(18, 7 + Math.floor((a.skl + a.lck) / 4))) : 0;
+  const aTriggerTriple = aIsPlayer && (Math.random() * 100 < aTripleChance);
+
+  if (aTriggerTriple) {
+    const tAlert = performance.now();
+    FX.push({ x: a.x, y: a.y, t: 'Liên kích!', c: '#fbbf24', ts: tAlert, big: true });
+    log('{{burst}} <b style="color:#b45309;font-size:13px;">' + a.name + ' bộc phát tuyệt kỹ: Tam Liên Kích – Đánh 3 phát chí mạng liên tục!</b>');
+    // 3 đòn chí mạng liên tiếp
+    swing(a, w, d, true);
+    if (d.hp > 0) swing(a, w, d, true);
+    if (d.hp > 0) swing(a, w, d, true);
+
+    if (d.hp > 0 && f.counter) {
+      swing(d, dw, a);
+      if (a.hp > 0 && f.dbl) swing(a, w, d, true);
+    }
+  } else {
+    for (const s of seq) {
+      if (a.hp <= 0 || d.hp <= 0) break;
+      if (s === 'a') {
+        swing(a, w, d);
+      } else {
+        // Phe ta khi phản đòn cũng có tỷ lệ kích hoạt Tam Liên Kích chí mạng
+        const dIsPlayer = (d.team === 0);
+        const dTripleChance = dIsPlayer ? Math.max(8, Math.min(18, 7 + Math.floor((d.skl + d.lck) / 4))) : 0;
+        const dTriggerTriple = dIsPlayer && (Math.random() * 100 < dTripleChance);
+        if (dTriggerTriple) {
+          const tAlert = performance.now() + AD * 520;
+          FX.push({ x: d.x, y: d.y, t: '⚡ PHẢN ĐÒN TAM LIÊN KÍCH! ⚡', c: '#fbbf24', ts: tAlert, big: true });
+          log('{{burst}} <b style="color:#b45309;font-size:13px;">' + d.name + ' phản kích: Tam Liên Kích 3 đòn chí mạng liên tiếp!</b>', AD * 520);
+          swing(d, dw, a, true);
+          if (a.hp > 0) swing(d, dw, a, true);
+          if (a.hp > 0) swing(d, dw, a, true);
+        } else {
+          swing(d, dw, a);
+        }
+      }
+    }
   }
 
   LD = AD * 520 + 250;
@@ -1913,18 +1968,23 @@ function gain(u, e) {
   if (u.exp >= 100) {
     u.exp -= 100;
     u.lv++;
-    const g = D.GR[CAT(u.job)], ks = ['str', 'skl', 'spd', 'def', 'mag', 'lck', 'mhp', 'mov'], up = [];
+    const g = (typeof D !== 'undefined' && D.GR) ? D.GR[CAT(u.job)] : [40, 40, 40, 30, 20, 40, 60];
+    const ks = ['str', 'skl', 'spd', 'def', 'mag', 'lck', 'mhp', 'mov'], up = [];
+    const isSilke = (u.id === 5 || (u.name && u.name.includes('Silke')));
     ks.forEach((k, i) => {
-      if (i < 7 && Math.random() * 100 < g[i]) {
+      const growthBonus = isSilke ? 15 : 0;
+      if (i < 7 && Math.random() * 100 < ((g ? g[i] : 30) + growthBonus)) {
         u[k] += (k == 'mhp' ? 2 : 1);
         up.push(k);
       }
     });
-    u.hp = Math.min(u.mhp, u.hp + 3);
+    // Tính năng: Cứ tăng lvl là hồi đầy HP ngay lập tức (100% MHP)
+    u.hp = u.mhp;
     log('{{star}} ' + u.name + ' thăng lên cấp ' + (u.lv + 1) + (up.length ? ' (+' + up.join(', ') + ')' : ''), LD);
+    log('{{heal}} <b>' + u.name + ' hồi phục toàn bộ sinh lực (' + u.mhp + '/' + u.mhp + ' HP) khi thăng cấp!</b>', LD + 50);
     const t = performance.now() + LD;
-    FX.push({ x: u.x, y: u.y, t: 'Lên cấp!', c: '#f5cb5c', ts: t, big: true });
-    burst(u.x, u.y, '#f5cb5c', 28, t, 85);
+    FX.push({ x: u.x, y: u.y, t: 'Lên cấp! Hồi đầy HP', c: '#10b981', ts: t, big: true });
+    burst(u.x, u.y, '#10b981', 32, t, 90);
     setTimeout(() => AudioSystem.sfx.levelUp(), LD);
   }
 }
@@ -2370,25 +2430,93 @@ function shop() {
 function stash(uid) {
   const us = G.roster;
   const u = uid != null ? us.find(x => x.id == uid) : us[0];
-  let h = '<h3>{{pack}} Quản Lý Kho Đồ</h3><div class="box-list" style="flex-direction:row;flex-wrap:wrap;">' +
+  const curW = wpn(u);
+
+  let h = '<h3>{{pack}} Quản Lý Kho Đồ</h3>' +
+    '<div style="font-size:12px;color:var(--tx-sec);margin-bottom:8px;">Chọn tướng, sau đó nhấn nút <b>Trang bị</b> để đổi vũ khí chính hoặc chuyển đồ vào kho.</div>' +
+    '<div class="box-list" style="flex-direction:row;flex-wrap:wrap;gap:4px;margin-bottom:10px;">' +
     us.map(x => '<button data-u="' + x.id + '" class="btn ' + (x === u ? 'pri' : '') + '">' + x.name + '</button>').join('') +
     '</div>';
-  h += '<b>Túi đồ: ' + u.name + ' (Tối đa 6 món)</b><div class="box-list">' +
-    (u.inv.map((it, k) => '<button data-t="' + k + '" class="btn"><span>' + iN(it.id) + '</span><span style="color:var(--tx-mut);font-size:12px;">' + (isW(it.id) ? it.u + ' lượt' : 'dùng') + ' {{arrow}} Cất vào kho</span></button>').join('') || '<span style="color:var(--tx-mut);">(Trống)</span>') +
-    '</div>';
-  h += '<b>Kho Chung (Chạm để nhận cho ' + u.name + ')</b><div class="box-list">' +
-    (G.stash.map((it, k) => '<button data-g="' + k + '" class="btn"><span>' + iN(it.id) + '</span><span style="color:var(--gold-deep);font-size:12px;">Lấy cho ' + u.name + ' {{arrow}}</span></button>').join('') || '<span style="color:var(--tx-mut);">(Kho trống)</span>') +
-    '</div><button id="x" class="btn pri">Xong</button>';
+
+  h += '<b>Túi đồ của ' + u.name + ' (' + u.inv.length + '/6 món):</b><div class="box-list">';
+  if (u.inv.length) {
+    u.inv.forEach((it, k) => {
+      const isEq = (it === curW);
+      const canEq = isW(it.id) && (u.mask & iT(it.id));
+      const s = iS(it.id);
+      const statTxt = isW(it.id) ? `[Công:${s[0]} Trúng:${s[1]}% Nặng:${s[5]}] · ${it.u} lượt` : 'Dược phẩm';
+      h += '<div style="display:flex;gap:6px;align-items:center;background:#ffffff;padding:6px 10px;border:1px solid ' + (isEq ? 'var(--gold-pri)' : 'var(--pn-border)') + ';clip-path:var(--cut-sm);">' +
+        '<div style="flex:1;"><b>' + (isEq ? '{{swords}} ' : '') + iN(it.id) + '</b> ' + (isEq ? '<span style="color:var(--gold-deep);font-weight:700;font-size:11px;">[Đang trang bị]</span>' : '') +
+          '<div style="font-size:11px;color:var(--tx-sec);">' + statTxt + '</div>' +
+        '</div>' +
+        (canEq && !isEq ? '<button data-eq="' + k + '" class="btn pri" style="padding:4px 8px;font-size:11px;">Trang bị</button>' : '') +
+        (iT(it.id) === 64 ? '<button data-use="' + k + '" class="btn pri" style="padding:4px 8px;font-size:11px;">Dùng</button>' : '') +
+        '<button data-t="' + k + '" class="btn" style="padding:4px 8px;font-size:11px;">Cất kho</button>' +
+      '</div>';
+    });
+  } else {
+    h += '<span style="color:var(--tx-mut);">(Túi đồ trống)</span>';
+  }
+  h += '</div>';
+
+  h += '<b style="margin-top:10px;display:block;">Kho Chung Hòm Đồ (' + G.stash.length + ' món):</b><div class="box-list">';
+  if (G.stash.length) {
+    G.stash.forEach((it, k) => {
+      const canEq = isW(it.id) && (u.mask & iT(it.id));
+      const s = iS(it.id);
+      const statTxt = isW(it.id) ? `[Công:${s[0]} Trúng:${s[1]}% Nặng:${s[5]}]` : 'Dược phẩm';
+      h += '<div style="display:flex;gap:6px;align-items:center;background:#ffffff;padding:6px 10px;border:1px solid var(--pn-border);clip-path:var(--cut-sm);">' +
+        '<div style="flex:1;"><b>' + iN(it.id) + '</b> ' + (canEq ? '<span style="color:var(--emerald-pri);font-weight:700;font-size:11px;">[Có thể dùng]</span>' : '<span style="color:var(--tx-mut);font-size:11px;">[Không hợp hệ]</span>') +
+          '<div style="font-size:11px;color:var(--tx-sec);">' + statTxt + ' · ' + (isW(it.id) ? it.u + ' lượt' : 'dùng') + '</div>' +
+        '</div>' +
+        (canEq && u.inv.length < 6 ? '<button data-geq="' + k + '" class="btn pri" style="padding:4px 8px;font-size:11px;">Lấy & Trang bị</button>' : '') +
+        '<button data-g="' + k + '" class="btn" ' + (u.inv.length >= 6 ? 'disabled' : '') + ' style="padding:4px 8px;font-size:11px;">' + (u.inv.length >= 6 ? 'Túi đầy' : 'Lấy vào túi') + '</button>' +
+      '</div>';
+    });
+  } else {
+    h += '<span style="color:var(--tx-mut);">(Kho đồ trống)</span>';
+  }
+  h += '</div><button id="x" class="btn pri" style="margin-top:12px;width:100%;">Hoàn tất</button>';
+
   openBox(h);
   const B = $('#box');
   B.querySelectorAll('[data-u]').forEach(b => b.onclick = () => stash(+b.dataset.u));
-  B.querySelectorAll('[data-t]').forEach(b => b.onclick = () => {
-    G.stash.push(u.inv.splice(+b.dataset.t, 1)[0]);
+  // Trang bị trực tiếp từ túi đồ
+  B.querySelectorAll('[data-eq]').forEach(b => b.onclick = () => {
+    const k = +b.dataset.eq;
+    const it = u.inv.splice(k, 1)[0];
+    u.inv.unshift(it); // Đưa lên đầu túi đồ để trở thành vũ khí chính wpn(u)
+    AudioSystem.sfx.click();
     stash(u.id);
   });
+  // Dùng dược phẩm
+  B.querySelectorAll('[data-use]').forEach(b => b.onclick = () => {
+    const k = +b.dataset.use;
+    const it = u.inv.splice(k, 1)[0];
+    useItem(u, it);
+    AudioSystem.sfx.heal();
+    stash(u.id);
+  });
+  // Cất vào kho
+  B.querySelectorAll('[data-t]').forEach(b => b.onclick = () => {
+    G.stash.push(u.inv.splice(+b.dataset.t, 1)[0]);
+    AudioSystem.sfx.click();
+    stash(u.id);
+  });
+  // Lấy và trang bị ngay từ kho chung
+  B.querySelectorAll('[data-geq]').forEach(b => b.onclick = () => {
+    if (u.inv.length < 6) {
+      const it = G.stash.splice(+b.dataset.geq, 1)[0];
+      u.inv.unshift(it); // Đưa lên đầu túi đồ
+      AudioSystem.sfx.click();
+      stash(u.id);
+    }
+  });
+  // Lấy vào túi
   B.querySelectorAll('[data-g]').forEach(b => b.onclick = () => {
     if (u.inv.length < 6) {
       u.inv.push(G.stash.splice(+b.dataset.g, 1)[0]);
+      AudioSystem.sfx.click();
       stash(u.id);
     }
   });
@@ -3703,9 +3831,24 @@ function renderSide(u) {
       st.map(x => '<div class="stat-box"><small>' + x[0] + '</small><b>' + x[1] + '</b></div>').join('') +
     '</div>';
 
-    h += '<b>Binh Khí & Dược Phẩm:</b><div class="inv-list">' +
-      (u.inv.map(i => '<div class="inv-item ' + (i === w ? 'equipped' : '') + '"><span>' + (i === w ? '{{swords}} ' : '') + iN(i.id) + '</span><i>' + (isW(i.id) ? i.u + ' lần' : 'dùng') + '</i></div>').join('') || '<span style="color:var(--tx-mut);">(Không mang đồ)</span>') +
-    '</div>';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;margin-bottom:2px;">' +
+      '<b>Binh Khí & Dược Phẩm:</b>' +
+      (u.team === 0 ? '<small style="color:var(--gold-deep);font-weight:700;font-size:11px;">(Nhấn vào trang bị/dùng)</small>' : '') +
+    '</div><div class="inv-list">';
+    if (u.inv.length) {
+      h += u.inv.map((i, idx) => {
+        const isEq = (i === w);
+        const canEq = isW(i.id) && (u.mask & iT(i.id));
+        const badge = isEq ? ' <b style="color:var(--gold-deep);font-size:10px;">[Đang dùng]</b>' : (canEq ? ' <span style="color:var(--azure-pri);font-size:10px;">[Nhấn để trang bị]</span>' : '');
+        return '<button type="button" data-side-idx="' + idx + '" class="inv-item btn ' + (isEq ? 'equipped' : '') + '" style="width:100%;text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:6px 10px;margin-bottom:2px;border:1px solid ' + (isEq ? 'var(--gold-pri)' : 'rgba(212,168,67,0.35)') + ';">' +
+          '<span>' + (isEq ? '{{swords}} ' : '') + iN(i.id) + badge + '</span>' +
+          '<i style="font-size:11px;opacity:0.8;">' + (isW(i.id) ? i.u + ' lần' : 'dùng') + '</i>' +
+        '</button>';
+      }).join('');
+    } else {
+      h += '<span style="color:var(--tx-mut);">(Không mang đồ)</span>';
+    }
+    h += '</div>';
   } else {
     h += '<div style="text-align:center;padding:24px 10px;color:var(--tx-mut);">' +
       '<div style="font-size:28px;margin-bottom:6px;">{{lily}}</div>' +
@@ -3714,6 +3857,78 @@ function renderSide(u) {
   }
 
   container.innerHTML = h;
+
+  if (u && u.team === 0) {
+    container.querySelectorAll('[data-side-idx]').forEach(b => {
+      b.onclick = () => {
+        const idx = +b.dataset.sideIdx;
+        const it = u.inv[idx];
+        if (!it) return;
+        const isEq = (it === wpn(u));
+        const canEq = isW(it.id) && (u.mask & iT(it.id));
+        const s = iS(it.id);
+
+        let desc = '<b>' + iN(it.id) + '</b><br>';
+        if (isW(it.id)) {
+          desc += 'Công: ' + s[0] + ' | Trúng: ' + s[1] + '% | Chí mạng: ' + s[2] + '%<br>Tầm xa: ' + s[3] + '-' + s[4] + ' ô | Nặng: ' + s[5] + ' | Độ bền: ' + it.u + ' lượt';
+        } else if (iT(it.id) === 32) {
+          desc += 'Gậy thánh quang trị liệu. Tầm xa: ' + s[3] + '-' + s[4] + ' ô | Còn lại: ' + it.u + ' lượt';
+        } else {
+          desc += 'Dược phẩm phục hồi sinh lực / tăng chỉ số.';
+        }
+
+        let acts = '';
+        if (canEq && !isEq) {
+          acts += '<button id="sideEquip" class="btn pri">{{swords}} Trang bị làm vũ khí chính</button>';
+        }
+        if (iT(it.id) === 64) {
+          acts += '<button id="sideUse" class="btn pri">{{heart}} Sử dụng ngay</button>';
+        }
+        if (typeof G !== 'undefined' && G && G.stash) {
+          acts += '<button id="sideStash" class="btn">{{pack}} Cất vào kho chung</button>';
+        }
+        acts += '<button id="sideClose" class="btn">Đóng</button>';
+
+        openBox(
+          '<h3>{{pack}} Thao Tác Trang Bị – ' + u.name + '</h3>' +
+          '<div class="box-desc">' + desc + '</div>' +
+          '<div class="box-list">' + acts + '</div>'
+        );
+
+        if ($('#sideEquip')) {
+          $('#sideEquip').onclick = () => {
+            u.inv.splice(idx, 1);
+            u.inv.unshift(it); // Đưa lên đầu túi đồ để trở thành wpn(u)
+            AudioSystem.sfx.click();
+            log('{{swords}} <b>' + u.name + ' đã trang bị ' + iN(it.id) + ' làm vũ khí chính.</b>');
+            closeBox();
+            hud();
+            renderSide(u);
+          };
+        }
+        if ($('#sideUse')) {
+          $('#sideUse').onclick = () => {
+            closeBox();
+            useItem(u, it);
+            u.inv.splice(idx, 1);
+            AudioSystem.sfx.heal();
+            hud();
+            renderSide(u);
+          };
+        }
+        if ($('#sideStash')) {
+          $('#sideStash').onclick = () => {
+            G.stash.push(u.inv.splice(idx, 1)[0]);
+            AudioSystem.sfx.click();
+            log('{{pack}} Đã cất ' + iN(it.id) + ' vào kho chung.');
+            closeBox();
+            renderSide(u);
+          };
+        }
+        $('#sideClose').onclick = closeBox;
+      };
+    });
+  }
 }
 
 /* ============================================================
