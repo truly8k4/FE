@@ -1083,8 +1083,11 @@ const AudioSystem = {
     // Thăng cấp: trống timpani + kèn đồng đi lên + hợp âm vang + chuông lấp lánh
     levelUp() {
       const A = AudioSystem; if (A.mute || !A.ctx) return;
-      const t = A.ctx.currentTime + 0.004, out = A._v(0.38);
-      A._tone(out, t, { f0: 130, f1: 62, dur: 0.38, vol: 0.55 });
+      // Đang phát khúc ca thăng cấp thì không phát chồng thêm (tránh rè khi nhiều người lên cấp cùng lúc)
+      if (A.ctx.currentTime < (A._lvEnd || 0)) return;
+      A._lvEnd = A.ctx.currentTime + 1.7;
+      const t = A.ctx.currentTime + 0.004, out = A._v(0.3);
+      A._tone(out, t, { f0: 130, f1: 62, dur: 0.38, vol: 0.4 });
       A._noise(out, t, { type: 'lowpass', f0: 900, f1: 200, dur: 0.12, vol: 0.25 });
       [[392, 0], [523.25, 0.11], [659.25, 0.22], [783.99, 0.33]].forEach(([f, d]) => A._brass(out, t + d, f, 0.2, 0.07, 0.1));
       const c0 = t + 0.46;
@@ -1978,7 +1981,13 @@ function spawn(job, lv, team, x, y, id, items, boss) {
 }
 
 const wpn = u => u.inv.find(i => isW(i.id) && iT(i.id) < 32 && (u.mask & iT(i.id)));
+const weapons = u => u.inv.filter(i => isW(i.id) && iT(i.id) < 32 && (u.mask & iT(i.id)));
 const stf = u => u.inv.find(i => iT(i.id) == 32 && (u.mask & 32));
+const stfs = u => (u.mask & 32) ? u.inv.filter(i => iT(i.id) == 32) : [];
+const staffHeal = s => s.id == 59 ? 25 : 12;
+const staffRange = s => iS(s.id)[4] || 2;
+const staffTargets = (u, s) => U.filter(o => o.hp > 0 && o.team !== 2 && o !== u && dist(o, u) <= staffRange(s) && o.hp < o.mhp)
+  .sort((a, b) => (a.hp / a.mhp) - (b.hp / b.mhp));
 const avo = u => {
   const w = wpn(u);
   return BalanceSystem.calcAS(u, w) * 2 + u.lck + AVO[terr(u.x, u.y)];
@@ -2054,12 +2063,12 @@ function atkTiles(u, x, y, w) {
   return r;
 }
 
-const targets = (u, x, y) => {
-  const w = wpn(u);
+const targetsWith = (u, x, y, w) => {
   if (!w) return [];
   const r = atkTiles(u, x, y, w);
   return U.filter(o => o.hp > 0 && hostile(o, u) && r.has(o.x + ',' + o.y));
 };
+const targets = (u, x, y) => targetsWith(u, x, y, wpn(u));
 
 function log(t, ms) {
   if (ms) { setTimeout(() => log(t), ms); return; }
@@ -2389,8 +2398,15 @@ async function startChap(i) {
   U = U.concat(G.roster);
 
   const dd = G.diff;
+  const bossId = (CHAP.boss && CHAP.boss.id) || BOSS[i];
   U.forEach(u => {
     if (u.team == 2) {
+      // Hạ nhiệt trùm (Desai & các boss chính): bớt máu, bớt sát thương, bớt chí mạng
+      if (u.id == bossId || (u.id >= 96 && u.id <= 106)) {
+        u.mhp = Math.max(10, Math.floor(u.mhp * 0.8));
+        u.str = Math.max(0, u.str - 2); u.def = Math.max(0, u.def - 2);
+        u.skl = Math.max(0, u.skl - 3); u.spd = Math.max(0, u.spd - 1);
+      }
       if (dd == 0) { u.mhp = Math.max(5, Math.floor(u.mhp * 0.85)); u.str = Math.max(0, u.str - 1); }
       if (dd == 2) { u.mhp = Math.ceil(u.mhp * 1.25); u.str += 2; u.def += 1; u.skl += 2; }
       u.hp = u.mhp;
@@ -2792,7 +2808,7 @@ function arena() {
     }
 
     const win = a.hp > 0 && e.hp > 0 ? a.hp >= e.hp : a.hp > 0;
-    const prize = win ? Math.floor(fee * 1.7) : 0;
+    const prize = win ? Math.floor(fee * 1.4) : 0; // trước là x1.7
     let exp = win ? Math.max(30, Math.floor(80 / (1 + 0.3 * (p.arenaFights - 1)))) : 10; // thắng nhiều EXP hơn, thua vẫn có EXP an ủi
 
     if (win) {
@@ -3471,11 +3487,11 @@ function menu() {
 
   if (MODE !== 'act') { m.style.display = 'none'; return; }
   const u = SEL;
-  if (targets(u, u.x, u.y).length) {
-    add('{{swords}} ' + S[24], () => { MODE = 'target'; ATK = targets(u, u.x, u.y); menu(); }, 'pri');
+  if (weapons(u).some(w => targetsWith(u, u.x, u.y, w).length)) {
+    add('{{swords}} ' + S[24], () => attackMenu(u), 'pri');
   }
-  if (stf(u) && U.some(o => o.hp > 0 && o.team !== 2 && o !== u && dist(o, u) <= (iS(stf(u).id)[4] || 2) && o.hp < o.mhp)) {
-    add('{{heal}} Dùng Gậy Thánh', useStaff);
+  if (stfs(u).some(s => staffTargets(u, s).length)) {
+    add('{{heal}} Dùng Gậy', () => useStaff());
   }
   if (MAP.t[u.y * MAP.w + u.x] == 5 && !VIS.has(u.x + ',' + u.y)) {
     add('{{cottage}} Vào Nhà Dân', () => visit(u));
@@ -3572,12 +3588,65 @@ function finish(u) {
   if (!U.some(x => x.team === 0 && x.hp > 0 && !x.done)) endTurn();
 }
 
-function useStaff() {
-  const u = SEL, s = stf(u);
-  const c = U.filter(o => o.hp > 0 && o.team !== 2 && dist(o, u) <= (iS(s.id)[4] || 2) && o.hp < o.mhp);
+function attackMenu(u) {
+  const ws = weapons(u).filter(w => targetsWith(u, u.x, u.y, w).length);
+  if (!ws.length) return;
+  const go = w => {
+    if (w !== wpn(u)) { // trang bị vũ khí đã chọn làm vũ khí chính
+      u.inv.splice(u.inv.indexOf(w), 1); u.inv.unshift(w);
+      AudioSystem.sfx.equip();
+    }
+    MODE = 'target'; ATK = targets(u, u.x, u.y);
+    menu(); renderSide();
+  };
+  if (ws.length === 1) return go(ws[0]);
+  let h = '<h3>' + u.name + ' – Chọn Vũ Khí</h3><div class="box-list">';
+  ws.forEach((w, k) => {
+    const s = iS(w.id), mg = iT(w.id) == 16, pw = (mg ? u.mag : u.str) + s[0];
+    const rg = s[3] == s[4] ? s[3] : s[3] + '-' + s[4];
+    h += '<button data-w="' + k + '" class="btn"><span>' + (w === wpn(u) ? '{{swords}} ' : '') + iN(w.id) + '</span>' +
+      '<span style="color:var(--tx-mut);">Lực ' + pw + ' · Tầm ' + rg + ' · ' + w.u + ' lượt · ' + targetsWith(u, u.x, u.y, w).length + ' mục tiêu</span></button>';
+  });
+  h += '</div><button id="x" class="btn">Quay lại</button>';
+  openBox(h);
+  $('#box').querySelectorAll('[data-w]').forEach(b => b.onclick = () => { closeBox(); go(ws[+b.dataset.w]); });
+  $('#x').onclick = closeBox;
+}
+
+function useStaff(sel) {
+  const u = SEL;
+  const ok = stfs(u).filter(s => staffTargets(u, s).length);
+  if (!ok.length) return;
+  // Bước 1: chọn gậy (nếu có nhiều hơn 1 cây dùng được)
+  if (!sel && ok.length > 1) {
+    let h = '<h3>' + u.name + ' – Chọn Gậy</h3><div class="box-list">';
+    ok.forEach((s, k) => {
+      h += '<button data-s="' + k + '" class="btn"><span>{{heal}} ' + iN(s.id) + '</span>' +
+        '<span style="color:var(--tx-mut);">Hồi ' + staffHeal(s) + ' · Tầm ' + staffRange(s) + ' · ' + s.u + ' lần</span></button>';
+    });
+    h += '</div><button id="x" class="btn">Quay lại</button>';
+    openBox(h);
+    $('#box').querySelectorAll('[data-s]').forEach(b => b.onclick = () => { closeBox(); useStaff(ok[+b.dataset.s]); });
+    $('#x').onclick = closeBox;
+    return;
+  }
+  const s = sel || ok[0], c = staffTargets(u, s);
   if (!c.length) return;
-  const o = c.sort((a, b) => (a.hp / a.mhp) - (b.hp / b.mhp))[0];
-  const healAmt = s.id == 59 ? 25 : 12;
+  // Bước 2: chọn người được hồi (nếu có nhiều hơn 1 người trong tầm)
+  if (c.length === 1) return castStaff(u, s, c[0]);
+  let h = '<h3>' + iN(s.id) + ' – Chọn Mục Tiêu</h3><div class="box-list">';
+  c.forEach((o, k) => {
+    h += '<button data-t="' + k + '" class="btn"><span>' + o.name + '</span>' +
+      '<span style="color:var(--tx-mut);">' + o.hp + '/' + o.mhp + ' HP · +' + Math.min(staffHeal(s), o.mhp - o.hp) + '</span></button>';
+  });
+  h += '</div><button id="x" class="btn">Quay lại</button>';
+  openBox(h);
+  $('#box').querySelectorAll('[data-t]').forEach(b => b.onclick = () => { closeBox(); castStaff(u, s, c[+b.dataset.t]); });
+  $('#x').onclick = closeBox;
+}
+
+function castStaff(u, s, o) {
+  const healAmt = staffHeal(s);
   const hp = Math.min(o.mhp, o.hp + healAmt);
   const gainedHP = hp - o.hp;
   o.hp = hp; o.hl = null;
