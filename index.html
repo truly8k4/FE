@@ -685,6 +685,53 @@ html, body { width: 100%; overscroll-behavior: none; }
   .box-list button { padding: 7px 12px; }
   #box img[style*="height:130px"] { height: 64px !important; margin-bottom: 0 !important; }
 }
+
+/* ===================== THĂNG TIẾN ===================== */
+.promo-head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+.promo-ava { width: 54px; height: 54px; flex: none; clip-path: var(--cut-sm); border: 2px solid var(--gold-glow); background: #f7f1e6; }
+.promo-ava img { width: 100%; height: 100%; image-rendering: pixelated; object-fit: cover; }
+.promo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
+.promo-card {
+  border: 0; padding: 2px; cursor: pointer; text-align: left; font: inherit; color: inherit;
+  clip-path: var(--cut-sm); background: linear-gradient(135deg, #e8c36a, #b8801a);
+  transition: transform .12s ease, filter .12s ease;
+}
+.promo-card:hover { transform: translateY(-1px); filter: brightness(1.06); }
+.promo-card .promo-in {
+  display: flex; gap: 8px; align-items: flex-start; height: 100%; padding: 8px;
+  clip-path: var(--cut-sm); background: linear-gradient(#fffdf6, #f6ecd2);
+}
+.promo-card.sel { background: linear-gradient(135deg, #60a5fa, #1d4ed8); }
+.promo-card.sel .promo-in { background: linear-gradient(#f3f8ff, #d9e8ff); }
+.promo-card.lock { opacity: .45; cursor: not-allowed; filter: grayscale(.6); }
+.promo-card.lock:hover { transform: none; filter: grayscale(.6); }
+.promo-spr {
+  width: 68px; height: 88px; flex: none; image-rendering: pixelated; object-fit: contain;
+  background: radial-gradient(circle at 50% 70%, rgba(217, 160, 50, .22), transparent 70%);
+}
+.promo-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.promo-name { font-family: var(--display); font-size: 14px; color: #6b4608; line-height: 1.2; }
+.promo-tags, .promo-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+.promo-tag, .promo-chip, .promo-fit {
+  font-style: normal; font-size: 10.5px; font-weight: 700; padding: 1px 6px; line-height: 1.5;
+}
+.promo-tag { background: #eef2ff; color: #3730a3; border: 1px solid rgba(55, 48, 163, .3); }
+.promo-chip { background: #e9f6ec; color: #047857; border: 1px solid rgba(5, 150, 105, .35); }
+.promo-fit { background: #fff3c4; color: #7a540c; border: 1px solid rgba(212, 154, 36, .6); }
+.promo-desc { font-size: 11.5px; line-height: 1.4; color: var(--tx-sec); }
+.promo-note { font-size: 12px; color: var(--tx-mut); margin: 6px 0 0; }
+.promo-result { display: flex; gap: 14px; align-items: center; margin: 8px 0 10px; }
+.promo-big {
+  width: 102px; height: 132px; flex: none; image-rendering: pixelated; object-fit: contain;
+  background: radial-gradient(circle at 50% 70%, rgba(245, 203, 92, .45), transparent 72%);
+}
+.promo-diffs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 14px; }
+.promo-diff { display: flex; justify-content: space-between; gap: 8px; padding: 3px 4px; font-size: 13px; border-bottom: 1px dashed rgba(217, 160, 50, .45); }
+.promo-diff b { color: #047857; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.promo-hint { margin: -2px 0 8px; font-size: 11.5px; font-weight: 700; color: var(--gold-deep); }
+@media (max-width: 560px) {
+  .promo-grid, .promo-diffs { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
@@ -819,9 +866,10 @@ const iS = id => EX[id] ? EX[id].s : (D.IT[id - 1] || [0, 0, 0, 0, 0, 0, 1]);
 const iN = id => EX[id] ? EX[id].n : S[166 + id];
 const iP = id => EX[id] ? EX[id].p : (D.PR[id - 1] || 1000);
 const isW = id => iT(id) < 32;
-const JOBN = j => S[154 + j];
+const JOBN = j => (CLS[j] ? CLS[j].name : S[154 + j]);
 const MASKJ = { 0: 1, 1: 32, 2: 5, 3: 3, 4: 16, 5: 5, 6: 16, 7: 8, 8: 3, 9: 5, 10: 16, 11: 8, 12: 3 };
-const CAT = j => [0, 1, 0, 0, 1, 2, 3, 4, 5, 2, 3, 4, 5][j];
+const CAT_BASE = [0, 1, 0, 0, 1, 2, 3, 4, 5, 2, 3, 4, 5];
+const CAT = j => j < 13 ? CAT_BASE[j] : CAT_BASE[(CLS[j] || { sp: 0 }).sp];
 const HERO = [132, 133, 134, 135, 136, 137, 138, 139, 140];
 const NEWN = {
   10: 'Raistlin', 11: 'Aaron', 12: 'Rom', 13: 'Sonny',
@@ -842,6 +890,235 @@ function uname(id, team) {
   if (id >= 50 && id < 70) return S[142];
   if (id >= 20 && id < 50) return S[141];
   return S[144];
+}
+
+/* ============================================================
+   2b. THĂNG TIẾN: LỚP NGHỀ, QUÂN PHỤC ĐỔI MÀU & SỰ KIỆN CHỌN HƯỚNG ĐI
+   - Lần I tại Cấp 15, lần II tại Cấp 25 (cấp hiển thị trên bảng chỉ số).
+   - Mỗi lớp mượn dáng quân phục sẵn có rồi đổi màu theo sắc phe ta (SCHEME).
+   - Lần II chỉ chọn trong 2 nhánh con của hướng đã chọn ở lần I.
+   - Accor không thể đi theo nhánh có phép thuật.
+   ============================================================ */
+const PROMO_LV = [15, 25];
+const BLUE3 = [[5, 28, 112], [38, 66, 187], [71, 156, 255]]; // 3 sắc xanh của quân phục phe ta
+const TRIM = [255, 242, 0];                                   // viền vàng của quân phục
+// Bảng đổi màu quân phục: [danh sách màu gốc, danh sách màu mới] (cùng định dạng với recolorCanvas)
+const SCHEME = {
+  gold:   [BLUE3.concat([TRIM]), [[100, 58, 0], [208, 146, 12], [255, 220, 88], [255, 255, 255]]],
+  teal:   [BLUE3, [[0, 52, 70], [0, 126, 148], [70, 214, 222]]],
+  jade:   [BLUE3, [[8, 60, 70], [20, 130, 120], [110, 225, 190]]],
+  violet: [BLUE3, [[36, 6, 92], [104, 46, 184], [176, 124, 255]]],
+  white:  [BLUE3, [[52, 62, 112], [150, 160, 204], [236, 240, 255]]],
+  dark:   [BLUE3.concat([TRIM]), [[6, 6, 18], [52, 52, 84], [112, 116, 160], [190, 190, 255]]]
+};
+
+/* Lớp thăng tiến. sp = dáng quân phục gốc (job có sẵn sprite), sch = bảng đổi màu (null = giữ nguyên màu xanh gốc).
+   bon = thưởng chỉ số [Sức mạnh, Kỹ năng, Tốc độ, Phòng thủ, Phép, May mắn, Máu, Di chuyển]. gift = vũ khí tặng kèm. */
+const CLS = {};
+function defCls(id, tier, line, name, sp, sch, mask, bon, gift, desc, sup) {
+  CLS[id] = { id, tier, line, name, sp, sch, mask, bon, gift, desc, sup: !!sup };
+}
+// ----- Thăng tiến lần I (Cấp 15): 6 hướng đi -----
+defCls(13, 1, 'knight', 'Hiệp Sĩ Thánh Điện', 8, 'gold', 3, [3, 2, 1, 5, 0, 2, 14, 1], 10,
+  'Giáp vàng, khiên thánh. Phòng thủ và sinh lực vượt trội, trụ vững tiền tuyến.');
+defCls(14, 1, 'axe', 'Dũng Sĩ Rìu', 5, 'teal', 5, [6, 2, 1, 2, 0, 2, 16, 0], 17,
+  'Vung rìu hạng nặng, sức tàn phá khủng khiếp. Máu dày, đòn nặng.');
+defCls(15, 1, 'arch', 'Cung Thủ Tinh Nhuệ', 7, 'jade', 8, [2, 5, 3, 1, 0, 3, 10, 1], 23,
+  'Mắt đại bàng, tay vững như đá. Bắn xa chính xác, tăng thêm tốc độ.');
+defCls(16, 1, 'mage', 'Ma Đạo Sĩ', 6, 'violet', 16, [0, 3, 2, 1, 6, 3, 10, 0], 29,
+  'Khai mở ma lực tiềm ẩn. Phép thuật xuyên giáp, hợp đánh từ xa.');
+defCls(17, 1, 'sword', 'Kiếm Sĩ Cận Vệ', 3, null, 3, [4, 4, 4, 2, 0, 3, 12, 1], 2,
+  'Kiếm pháp gọn gàng, kỹ năng và tốc độ cao. Nhanh, chuẩn, hay đánh đôi.');
+defCls(18, 1, 'priest', 'Linh Mục', 1, 'white', 16 | 32, [0, 2, 2, 2, 5, 4, 10, 0], 33,
+  'Thánh quang hộ thể. Gậy hồi phục mạnh hơn theo Phép, dùng được phép Ánh Sáng.', true);
+// ----- Thăng tiến lần II (Cấp 25): mỗi hướng có 2 nhánh -----
+defCls(19, 2, 'knight', 'Kị Sĩ Hoàng Gia', 12, null, 3, [4, 3, 2, 7, 1, 2, 18, 1], 11,
+  'Cận vệ tinh nhuệ của vương quốc. Giáp nặng, vừa thủ vững vừa công mạnh.');
+defCls(20, 2, 'knight', 'Hắc Kỵ Sĩ', 12, 'dark', 7, [6, 4, 2, 5, 0, 2, 16, 1], 17,
+  'Giáp đen bất khả xâm phạm. Thạo cả Kiếm, Thương lẫn Rìu.');
+defCls(21, 2, 'axe', 'Rìu Chiến Vương', 9, null, 5, [8, 3, 2, 3, 0, 2, 20, 0], 17,
+  'Hung thần chiến trường. Sức mạnh và sinh lực đỉnh cao.');
+defCls(22, 2, 'axe', 'Đại Tướng Quân', 12, 'gold', 7, [6, 4, 2, 5, 0, 3, 18, 1], 11,
+  'Thống soái giáp vàng, dùng cả Kiếm, Thương và Rìu. Cân bằng công thủ.');
+defCls(23, 2, 'arch', 'Thần Xạ Thủ', 11, null, 8, [3, 8, 4, 2, 0, 4, 12, 1], 24,
+  'Bách phát bách trúng. Kỹ năng và độ chính xác vô song.');
+defCls(24, 2, 'arch', 'Xạ Kiếm Săn Rồng', 11, 'teal', 9, [4, 6, 5, 3, 0, 3, 14, 1], 24,
+  'Kết hợp cung và kiếm, công thủ toàn diện ở mọi tầm đánh.');
+defCls(25, 2, 'mage', 'Đại Pháp Sư', 10, null, 16, [0, 4, 3, 2, 9, 4, 12, 0], 32,
+  'Đỉnh cao ma đạo. Phép thuật hủy diệt, nghiền nát mọi lớp giáp.');
+defCls(26, 2, 'mage', 'Hiền Giả', 4, null, 16 | 32, [0, 4, 3, 3, 7, 5, 14, 1], 32,
+  'Vừa niệm phép vừa dùng gậy hỗ trợ đồng đội. Linh hoạt và bền bỉ.');
+defCls(27, 2, 'sword', 'Kiếm Thánh', 3, 'gold', 3, [6, 6, 5, 3, 0, 4, 15, 1], 3,
+  'Kiếm đạo đại thành. Mạnh, chuẩn, bền và rất khó bị chặn đòn.');
+defCls(28, 2, 'sword', 'Ảnh Kiếm Sĩ', 3, 'dark', 1, [5, 8, 8, 1, 0, 5, 12, 2], 3,
+  'Nhanh như bóng, chí mạng liên hồi. Di chuyển xa, né tránh cao.');
+defCls(29, 2, 'priest', 'Đại Thánh Tế', 4, 'white', 16 | 32, [0, 3, 4, 3, 8, 6, 14, 0], 34,
+  'Bậc thánh nhân tối cao. Gậy hồi phục cực mạnh cùng phép Ánh Sáng.', true);
+defCls(30, 2, 'priest', 'Thánh Hiệp Sĩ', 12, 'white', 3 | 32, [4, 3, 2, 6, 2, 4, 18, 1], 11,
+  'Kỵ sĩ thánh vừa xông pha vừa cứu thương bằng gậy. Trâu bò, hữu dụng.');
+Object.values(CLS).forEach(c => { MASKJ[c.id] = c.mask; D.CT[c.id] = (D.CT[c.sp] || D.CT[0]).slice(); });
+
+const isSup = j => j === 1 || j === 4 || !!(CLS[j] && CLS[j].sup); // lớp hỗ trợ: EXP cố định, bị AI ưu tiên săn
+const LEGACY_LINE = { 3: 'sword', 4: 'priest', 9: 'axe', 10: 'mage', 11: 'arch', 12: 'knight' }; // lớp "đã thăng tiến" có sẵn (Aaron, Lilith, Sonny...)
+const BASE_LINE = { 0: 'sword', 1: 'priest', 2: 'sword', 5: 'axe', 6: 'mage', 7: 'arch', 8: 'knight' };
+const PSTK = ['str', 'skl', 'spd', 'def', 'mag', 'lck', 'mhp', 'mov'];
+const PSTN = { str: 'Sức mạnh', skl: 'Kỹ năng', spd: 'Tốc độ', def: 'Phòng thủ', mag: 'Phép thuật', lck: 'May mắn', mhp: 'Sinh lực', mov: 'Di chuyển' };
+const PWN = [[1, 'Kiếm'], [2, 'Thương'], [4, 'Rìu'], [8, 'Cung'], [16, 'Phép'], [32, 'Gậy']];
+
+// Nhân vật dùng lớp đã thăng tiến sẵn có (từ dữ liệu gốc) coi như đã qua lần I
+function normPromo(u) {
+  if (!u || u.team === 2 || u.tier != null) return;
+  if (LEGACY_LINE[u.job]) { u.tier = 1; u.line = LEGACY_LINE[u.job]; }
+  else u.tier = 0;
+}
+const promoTier = u => u.tier || 0;
+const promoDue = u => !!u && u.team === 0 && promoTier(u) < 2 && (u.lv + 1) >= PROMO_LV[promoTier(u)] &&
+  !(u.hp <= 0 && U.includes(u)); // đang gục trên chiến trường thì để sau
+const promoAllowed = (u, c) => !(u.id === 0 && (c.mask & 16)); // Accor không thể thành pháp sư
+function promoOptions(u) {
+  const t = promoTier(u), line = u.line || BASE_LINE[u.job];
+  const all = Object.values(CLS).filter(c => c.tier === t + 1);
+  const r = t === 0 ? all : all.filter(c => c.line === line);
+  return r.length ? r : all; // phòng hờ dữ liệu lạ: luôn có lựa chọn để không bị kẹt
+}
+
+// Ảnh xem trước: thân (đã đổi màu) + đầu của chính nhân vật đó
+const PREVIEW_CACHE = {};
+function unitPreview(u, job) {
+  const key = u.id + '_' + job;
+  if (PREVIEW_CACHE[key]) return PREVIEW_CACHE[key];
+  const bi = SpriteSystem.recolors['stand1_' + job] || SpriteSystem.raw['stand1_' + job];
+  if (!(bi && bi.width)) return '';
+  const hd = SpriteSystem.getHead(headZ(u)), o = EY[CAT(job)] || EY[0];
+  const c = document.createElement('canvas');
+  c.width = 34; c.height = 44;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  const bx = 6, bot = 41;
+  g.fillStyle = 'rgba(0,0,0,0.2)';
+  g.beginPath(); g.ellipse(bx + 12, bot - 1, 10, 3, 0, 0, 7); g.fill();
+  if (hd && hd.width) g.drawImage(hd, bx + o[0], bot - T + o[1] - hd.height);
+  g.drawImage(bi, bx, bot - bi.height);
+  return PREVIEW_CACHE[key] = c.toDataURL();
+}
+
+// Áp dụng thăng tiến: đổi lớp, cộng chỉ số, đổi vũ khí được dùng, hồi đầy máu
+function applyPromotion(u, c) {
+  const before = {};
+  PSTK.forEach(k => before[k] = u[k]);
+  PSTK.forEach((k, i) => { u[k] = (u[k] || 0) + (c.bon[i] || 0); });
+  u.job = c.id; u.tier = c.tier; u.line = c.line;
+  u.mask = c.mask | ((u.mask & 32) ? 32 : 0); // đã biết dùng gậy thì giữ lại khả năng đó
+  u.hl = null; u.hp = u.mhp;
+  let gifted = null;
+  if (c.gift && !u.inv.some(i => iT(i.id) === iT(c.gift))) {
+    const it = { id: c.gift, u: iS(c.gift)[6] || 1 };
+    if (u.inv.length < 6) { u.inv.push(it); gifted = [it, 'túi đồ']; }
+    else { G.stash.push(it); gifted = [it, 'Kho Đồ']; }
+  }
+  return { before, gifted };
+}
+
+function promoFx(u) {
+  AudioSystem.sfx.levelUp();
+  if (MAP && U.includes(u)) {
+    const t = performance.now();
+    CUR = { x: u.x, y: u.y };
+    FX.push({ x: u.x, y: u.y, t: 'Thăng Tiến!', c: '#f5cb5c', ts: t, big: true });
+    burst(u.x, u.y, '#f5cb5c', 40, t, 110);
+    burst(u.x, u.y, '#93c5fd', 24, t + 150, 80);
+    FLS = { ts: t, dur: 600, c: 'rgba(245, 203, 92, 0.55)' };
+  }
+  log('{{crown}} ' + u.name + ' thăng tiến thành ' + JOBN(u.job) + '!');
+}
+
+const promoTags = (mask, u) => {
+  const keepStaff = (u.mask & 32) && !(mask & 32);
+  return PWN.filter(w => (mask | (u.mask & 32)) & w[0]).map(w => '<i class="promo-tag">' + w[1] + (w[0] === 32 && keepStaff ? ' (giữ lại)' : '') + '</i>').join('');
+};
+const promoChips = b => PSTK.map((k, i) => b[i] ? '<i class="promo-chip">+' + b[i] + ' ' + PSTN[k] + '</i>' : '').join('');
+
+// Sự kiện thăng tiến: chọn hướng đi -> xác nhận -> bảng kết quả
+function promotionEvent(u) {
+  return new Promise(resolve => {
+    const t = promoTier(u), opts = promoOptions(u), nat = BASE_LINE[u.job] || u.line;
+    let pick = null;
+    const card = c => {
+      const lock = !promoAllowed(u, c);
+      return '<button class="promo-card' + (lock ? ' lock' : '') + '" data-c="' + c.id + '"' + (lock ? ' disabled' : '') + '><span class="promo-in">' +
+        '<img class="promo-spr" src="' + unitPreview(u, c.id) + '">' +
+        '<span class="promo-txt">' +
+          '<b class="promo-name">' + c.name + '</b>' +
+          '<span class="promo-tags">' + promoTags(c.mask, u) + (t === 0 && c.line === nat ? '<i class="promo-fit">Hợp lớp hiện tại</i>' : '') + '</span>' +
+          '<span class="promo-chips">' + promoChips(c.bon) + '</span>' +
+          '<span class="promo-desc">' + (lock ? '{{warn}} Accor không thể đi theo con đường phép thuật.' : c.desc) + '</span>' +
+        '</span></span></button>';
+    };
+    openBox(
+      '<h3>{{crown}} Thăng Tiến Lần ' + (t ? 'II' : 'I') + '</h3>' +
+      '<div class="promo-head"><div class="promo-ava"><img src="' + HURL(u) + '"></div>' +
+        '<div class="box-desc"><b>' + u.name + '</b> đạt <b>Cấp ' + (u.lv + 1) + '</b>!\nHiện là <b>' + JOBN(u.job) + '</b>. ' +
+        (t ? 'Hãy chọn con đường tối thượng để hoàn tất hành trình.' : 'Hãy chọn một hướng đi — mỗi hướng có quân phục, binh khí và sở trường riêng.') + '</div></div>' +
+      '<div class="promo-grid">' + opts.map(card).join('') + '</div>' +
+      '<p class="promo-note">Chỉ số tăng đáng kể và hồi đầy sinh lực ngay khi thăng tiến.' + ((u.mask & 32) ? ' Khả năng dùng Gậy được giữ nguyên.' : '') + ' Lựa chọn này không thể đổi lại.</p>' +
+      '<p class="dlg-actions" style="text-align:right;margin:10px 0 0;"><button id="y" class="btn pri" disabled>Hãy chọn một hướng đi</button></p>'
+    );
+    const B = $('#box');
+    B.querySelectorAll('.promo-card').forEach(b => b.onclick = () => {
+      if (b.disabled) return;
+      AudioSystem.sfx.click();
+      pick = +b.dataset.c;
+      B.querySelectorAll('.promo-card').forEach(x => x.classList.toggle('sel', x === b));
+      const y = $('#y');
+      y.disabled = false;
+      y.innerHTML = '{{star4}} Thăng tiến: ' + CLS[pick].name;
+    });
+    $('#y').onclick = () => {
+      if (pick == null) return;
+      const c = CLS[pick], r = applyPromotion(u, c);
+      promoFx(u);
+      const diffs = PSTK.filter(k => u[k] !== r.before[k]).map(k =>
+        '<div class="promo-diff"><span>' + PSTN[k] + '</span><b>' + r.before[k] + ' {{arrow}} ' + u[k] + '</b></div>').join('');
+      openBox(
+        '<h3>{{star}} Thăng Tiến Thành Công!</h3>' +
+        '<div class="promo-result"><img class="promo-big" src="' + unitPreview(u, c.id) + '">' +
+          '<div class="box-desc"><b>' + u.name + '</b> trở thành <b>' + c.name + '</b>' + (c.tier === 2 ? ' — lớp tối thượng!' : '!') +
+          '\nDùng được: ' + PWN.filter(w => u.mask & w[0]).map(w => w[1]).join(', ') +
+          (r.gifted ? '\nNhận ' + iN(r.gifted[0].id) + ' (vào ' + r.gifted[1] + ').' : '') + '\nSinh lực hồi đầy.</div></div>' +
+        '<div class="promo-diffs">' + diffs + '</div>' +
+        '<p class="dlg-actions" style="text-align:right;margin:12px 0 0;"><button id="nx" class="btn pri">Tiếp tục {{play}}</button></p>'
+      );
+      $('#nx').onclick = () => {
+        AudioSystem.sfx.click();
+        closeBox();
+        StorageSystem.save();
+        hud(); renderSide();
+        resolve();
+      };
+      $('#nx').focus();
+    };
+  });
+}
+
+// Chạy mọi sự kiện thăng tiến đang chờ (gọi ở các thời điểm an toàn: sau trận đánh, dùng gậy, về doanh trại...)
+let PROMO_P = null;
+function runPromotions() {
+  if (PROMO_P) return PROMO_P;
+  if (!G || !G.roster || !G.roster.some(promoDue)) return Promise.resolve();
+  PROMO_P = (async () => {
+    try {
+      for (const u of G.roster.slice()) {
+        while (promoDue(u)) await promotionEvent(u);
+      }
+    } catch (e) { console.error(e); }
+    PROMO_P = null;
+  })();
+  return PROMO_P;
+}
+function promoHint(u) {
+  if (u.team !== 0) return '';
+  const t = promoTier(u);
+  return '<div class="promo-hint">' + (t < 2 ? '{{star4}} Thăng tiến lần ' + (t ? 'II' : 'I') + ' tại Cấp ' + PROMO_LV[t] : '{{crown}} Đã đạt lớp tối thượng') + '</div>';
 }
 
 /* ============================================================
@@ -1450,6 +1727,14 @@ const SpriteSystem = {
       this.recolors.head_10 = this.recolorCanvas(this.raw.head_1, PAL[10]);
       this.recolors.head_11 = this.recolorCanvas(this.raw.head_1, PAL[11]);
       this.recolors.head_12 = this.recolorCanvas(this.raw.head_2, PAL[12]);
+      // Quân phục các lớp thăng tiến: lấy dáng quân phục gốc rồi đổi màu theo SCHEME
+      Object.values(CLS).forEach(c => {
+        ['stand1_', 'stand2_', 'attack1_', 'attack2_'].forEach(n => {
+          const src = this.raw[n + c.sp];
+          if (!(src && src.width)) return;
+          this.recolors[n + c.id] = c.sch ? this.recolorCanvas(src, SCHEME[c.sch]) : src;
+        });
+      });
     } catch (e) {
       console.warn('Recolor build error', e);
     }
@@ -1684,6 +1969,7 @@ const StorageSystem = {
         G.endings = G.endings || [];
         G.stats = G.stats || { crits: 0, heals: 0, arenaWins: 0, rogueFloors: 0 };
         (G.roster || []).forEach(boostSilke);
+        (G.roster || []).forEach(normPromo);
         return true;
       }
     } catch (e) {}
@@ -1718,6 +2004,7 @@ const StorageSystem = {
         G.endings = G.endings || [];
         G.stats = G.stats || { crits: 0, heals: 0, arenaWins: 0, rogueFloors: 0 };
         (G.roster || []).forEach(boostSilke);
+        (G.roster || []).forEach(normPromo);
         this.save();
         return true;
       }
@@ -1922,7 +2209,7 @@ function freeNearM(m, x, y, list) {
    ============================================================ */
 let PT = [], EFF = [], SHK = null, FLS = null, BAN = null, LD = 0, PREVM = null;
 let VIS = new Set(), G = null, MAP = null, U = [], CHAP = null, SEL = null, MODE = '';
-let RNG = null, ATK = null, PHASE = 'player', TURN = 1, ORIG = null, BUSY = false;
+let RNG = null, ATK = null, PHASE = 'player', TURN = 1, ORIG = null, BUSY = false, WARP = null;
 let FX = [], LOG = [], CUR = { x: 0, y: 0 };
 let CURRENT_TAB = 'unit';
 
@@ -1984,10 +2271,50 @@ const wpn = u => u.inv.find(i => isW(i.id) && iT(i.id) < 32 && (u.mask & iT(i.id
 const weapons = u => u.inv.filter(i => isW(i.id) && iT(i.id) < 32 && (u.mask & iT(i.id)));
 const stf = u => u.inv.find(i => iT(i.id) == 32 && (u.mask & 32));
 const stfs = u => (u.mask & 32) ? u.inv.filter(i => iT(i.id) == 32) : [];
-const staffHeal = s => s.id == 59 ? 25 : 12;
-const staffRange = s => iS(s.id)[4] || 2;
-const staffTargets = (u, s) => U.filter(o => o.hp > 0 && o.team !== 2 && o !== u && dist(o, u) <= staffRange(s) && o.hp < o.mhp)
-  .sort((a, b) => (a.hp / a.mhp) - (b.hp / b.mhp));
+/* ===== GẬY PHÉP: mỗi loại gậy có hiệu ứng riêng (trước đây tất cả đều chỉ hồi 12 máu) =====
+   heal   = hồi máu 1 đồng đội trong tầm        repair = phục hồi độ bền 1 binh khí của đồng đội
+   aoe    = hồi máu mọi đồng đội quanh người dùng   warp   = đưa 1 đồng đội bên cạnh tới ô trống trong tầm */
+const STAFF = {
+  36: { k: 'heal', rng: 1, base: 10 },   // Gậy trị thương: hồi cho đồng đội sát bên
+  37: { k: 'heal', rng: 99, base: 10 },  // Gậy tầm xa: hồi từ bất kỳ khoảng cách nào (dữ liệu gốc: tầm 100)
+  38: { k: 'aoe', rng: 2, base: 5 },     // Đũa phép Aaron: hồi cho mọi đồng đội trong 2 ô
+  39: { k: 'repair', rng: 1 },           // Gậy sửa chữa
+  40: { k: 'warp', rng: 1 },             // Gậy dịch chuyển
+  59: { k: 'heal', rng: 2, base: 25 }    // Gậy Thánh Quang
+};
+const stfDef = s => STAFF[s.id] || { k: 'heal', rng: iS(s.id)[4] || 1, base: iS(s.id)[0] || 10 };
+const staffHeal = (s, u) => stfDef(s).base + (u ? (u.mag >> 1) : 0); // lượng hồi tăng theo Phép của người dùng
+const warpRange = u => 4 + (u.mag >> 1);                              // bán kính dịch chuyển tăng theo Phép
+const repairable = o => o.inv.filter(i => iT(i.id) <= 32 && i.u < (iS(i.id)[6] || 0));
+const allyIn = (u, r) => U.filter(o => o.hp > 0 && o.team !== 2 && o !== u && dist(o, u) <= r);
+function warpTiles(u) {
+  const r = warpRange(u), set = new Set();
+  for (let dx = -r; dx <= r; dx++) {
+    for (let dy = -r; dy <= r; dy++) {
+      if (Math.abs(dx) + Math.abs(dy) > r) continue;
+      const x = u.x + dx, y = u.y + dy;
+      if (inb(x, y) && COST[terr(x, y)] < 9 && !at(x, y)) set.add(x + ',' + y);
+    }
+  }
+  return set;
+}
+function staffTargets(u, s) {
+  const d = stfDef(s);
+  let c = allyIn(u, d.rng);
+  if (d.k === 'heal' || d.k === 'aoe') c = c.filter(o => o.hp < o.mhp);
+  else if (d.k === 'repair') c = c.filter(o => repairable(o).length);
+  else if (d.k === 'warp' && !warpTiles(u).size) return [];
+  return c.sort((a, b) => (a.hp / a.mhp) - (b.hp / b.mhp));
+}
+function staffBrief(s, u) {
+  const d = stfDef(s), rg = d.rng >= 50 ? 'toàn bản đồ' : d.rng + ' ô';
+  const hv = u ? staffHeal(s, u) : d.base + ' + Phép/2';
+  if (d.k === 'heal') return 'Hồi ' + hv + ' HP · Tầm ' + rg;
+  if (d.k === 'aoe') return 'Hồi ' + hv + ' HP cho mọi đồng đội trong ' + rg;
+  if (d.k === 'repair') return 'Phục hồi độ bền 1 binh khí · Tầm ' + rg;
+  if (d.k === 'warp') return 'Đưa 1 đồng đội bên cạnh tới ô trống trong ' + (u ? warpRange(u) : '4 + Phép/2') + ' ô';
+  return '';
+}
 const avo = u => {
   const w = wpn(u);
   return BalanceSystem.calcAS(u, w) * 2 + u.lck + AVO[terr(u.x, u.y)];
@@ -2196,7 +2523,7 @@ function dispHP(u, ts) {
 
 function expFor(a, d, kill) {
   if (a.team !== 0) return 0;
-  if (a.job == 1 || a.job == 4) return 15;
+  if (isSup(a.job)) return 15;
   const df = d.lv - a.lv;
   return kill ? clamp(50 + 5 * df, 30, 100) : Math.max(30 + (df >= 0 ? 5 : 10) * df, 10);
 }
@@ -2310,7 +2637,7 @@ function rollEvent() {
   const e = EV[rnd(EV.length)];
   e.f();
   log('{{scroll}} Sự kiện: ' + e.n);
-  return dlg([{ h: '{{scroll}} Sự Kiện Chiến Trường: ' + e.n, t: e.t }]);
+  return dlg([{ h: '{{scroll}} Sự Kiện Chiến Trường: ' + e.n, t: e.t }]).then(() => runPromotions());
 }
 
 const TOTAL = 10 + GEN.length, BOSS = { 1: 97, 8: 100, 9: 100 }, LIM = { 8: 20 };
@@ -2386,6 +2713,7 @@ async function startChap(i) {
   }
 
   G.roster.forEach(boostSilke);
+  G.roster.forEach(normPromo);
   G.roster.forEach(u => { u.hp = u.mhp; u.done = false; u.team = 0; u.arenaFights = 0; });
   const used = new Set();
   G.roster.forEach(u => {
@@ -2432,6 +2760,7 @@ async function startChap(i) {
     const sp = getDialogueSpeaker(t, i, k);
     return { speaker: sp.name, p: sp.p, side: sp.side, title: sp.title, t };
   }));
+  await runPromotions();
   hud();
   playerStart();
 }
@@ -2511,7 +2840,7 @@ async function aiAct(e) {
     for (const d of targets(e, x, y)) {
       const f = forecast(e, d);
       let sc = f.dmg * f.hit / 100 + (d.hp <= f.dmg ? 70 : 0) + (d.id == 0 ? 30 : 0) - (f.counter ? f.ddmg * f.dhit / 100 * 0.7 : 0) + AVO[terr(x, y)] / 6;
-      if (d.job == 1 || d.job == 4) sc += 20;
+      if (isSup(d.job)) sc += 20;
       if (sc > bs) { bs = sc; best = { x, y, d }; }
     }
     e.x = save[0]; e.y = save[1];
@@ -2543,6 +2872,7 @@ async function aiAct(e) {
   await wait(140);
   const n = battle(e, best.d);
   await wait(520 * n + 560);
+  await runPromotions();
 }
 
 function checkEnd() {
@@ -2572,6 +2902,37 @@ function ask(h, t, labels) {
 
 const NEXTC = c => c < 9 ? [c + 1] : c == 9 ? [10] : c == 10 ? [11] : c == 11 ? [12] : c == 13 ? [14] : c == 14 ? [15] : [];
 
+const STAT_VN = { mhp: 'Máu', str: 'Sức mạnh', mag: 'Phép', skl: 'Kỹ năng', spd: 'Tốc độ', def: 'Phòng thủ', lck: 'May mắn' };
+
+/* Silke ăn theo cấp trung bình của cả đội khi thắng trận (có hoạt cảnh thăng cấp trước khi về sảnh) */
+async function silkeCatchUp() {
+  const s = G.roster.find(isSilke);
+  if (!s) return;
+  const mates = G.roster.filter(u => u !== s && u.team === 0);
+  if (!mates.length) return;
+  const avg = Math.round(mates.reduce((a, u) => a + u.lv, 0) / mates.length);
+  const n = avg - s.lv;
+  if (n <= 0) return;
+
+  const from = s.lv, before = {};
+  Object.keys(STAT_VN).forEach(k => before[k] = s[k]);
+  const onMap = s.hp > 0 && U.includes(s);
+
+  for (let k = 0; k < n; k++) {
+    if (onMap) CUR = { x: s.x, y: s.y };
+    LD = 0;
+    gain(s, 100); // mỗi lần = đúng 1 cấp, tung chỉ số như lên cấp bình thường
+    await wait(1900); // chờ hiệu ứng + khúc ca thăng cấp phát xong rồi mới lên cấp tiếp
+  }
+
+  const ups = Object.keys(STAT_VN).filter(k => s[k] > before[k]).map(k => '+' + (s[k] - before[k]) + ' ' + STAT_VN[k]);
+  await dlg([{
+    h: '{{star}} Silke Thăng Cấp',
+    t: 'Chứng kiến chiến công của đồng đội, Silke tiến bộ vượt bậc: cấp ' + (from + 1) + ' → cấp ' + (s.lv + 1) + ' (theo cấp trung bình của đội).\n' + (ups.length ? ups.join(', ') : ''),
+    speaker: 'Nữ Tu Silke', p: 2, side: 'purple', title: 'Thánh Điện Sofia'
+  }]);
+}
+
 async function over(win) {
   AudioSystem.playBGM(win ? 'victory' : 'gameover');
   hud();
@@ -2581,6 +2942,8 @@ async function over(win) {
     startChap(G.ch);
     return;
   }
+
+  try { await silkeCatchUp(); } catch (e) { console.error(e); }
 
   G.cleared = Math.max(G.cleared, G.ch + 1);
   const rw = 1500 + Math.min(G.ch, 12) * 500 + (CHAP.reward || 0);
@@ -2638,6 +3001,7 @@ function camp() {
   AudioSystem.playBGM('camp');
   BUSY = false; U = []; MAP = null;
   fit(); hud(); menu(); renderSide();
+  if (G.roster && G.roster.some(promoDue)) { runPromotions().then(camp); return; } // có người đủ cấp thăng tiến
   G.avail = G.avail || [0];
   const chs = G.avail.slice().sort((a, b) => a - b);
 
@@ -2692,7 +3056,7 @@ function shop() {
   const stock = ids.filter(i => iP(i) <= 3500 + G.cleared * 2000 + (G.cleared >= 10 ? 10000 : 0));
   let h = '<h3>{{shop}} Cửa Hàng – {{coin}} ' + G.gold + ' Vàng</h3><div style="font-size:12px;color:var(--tx-sec);margin-bottom:8px;">Mua đồ vào kho chung. Bán lại nhận 50% vàng.</div><div class="box-list">';
   stock.forEach(i => {
-    h += '<button data-b="' + i + '" class="btn" ' + (G.gold < iP(i) ? 'disabled' : '') + '><span>' + iN(i) + (iT(i) < 64 ? ' <small style="color:var(--tx-mut);">[Công:' + iS(i)[0] + ' Trúng:' + iS(i)[1] + ' Nặng:' + iS(i)[5] + ']</small>' : '') + '</span><span style="color:var(--gold-deep);font-weight:800;">' + iP(i) + ' Vàng</span></button>';
+    h += '<button data-b="' + i + '" class="btn" ' + (G.gold < iP(i) ? 'disabled' : '') + '><span>' + iN(i) + (iT(i) < 32 ? ' <small style="color:var(--tx-mut);">[Công:' + iS(i)[0] + ' Trúng:' + iS(i)[1] + ' Nặng:' + iS(i)[5] + ']</small>' : iT(i) === 32 ? ' <small style="color:var(--tx-mut);">[' + staffBrief({ id: i }, null) + ' · ' + iS(i)[6] + ' lần]</small>' : '') + '</span><span style="color:var(--gold-deep);font-weight:800;">' + iP(i) + ' Vàng</span></button>';
   });
   h += '</div><b>Bán từ Kho Đồ</b><div class="box-list">' +
     (G.stash.map((it, k) => '<button data-s="' + k + '" class="btn"><span>' + iN(it.id) + '</span><span style="color:var(--gold-pri);font-weight:800;">+' + Math.floor(iP(it.id) / 2) + ' Vàng</span></button>').join('') || '<span style="color:var(--tx-mut);">(Kho trống)</span>') +
@@ -2727,7 +3091,7 @@ function stash(uid) {
     (u.inv.map((it, k) => {
       const canEq = isW(it.id) && (u.mask & iT(it.id)) && it !== eqW;
       return (canEq ? '<button data-e="' + k + '" class="btn pri"><span>{{swords}} Trang bị ' + iN(it.id) + '</span><span style="font-size:12px;">' + it.u + ' lượt</span></button>' : '') +
-        '<button data-t="' + k + '" class="btn"><span>' + (it === eqW ? '{{swords}} ' : '') + iN(it.id) + (it === eqW ? ' <small style="color:var(--gold-deep);">(đang cầm)</small>' : '') + '</span><span style="color:var(--tx-mut);font-size:12px;">' + (isW(it.id) ? it.u + ' lượt' : 'dùng') + ' {{arrow}} Cất vào kho</span></button>';
+        '<button data-t="' + k + '" class="btn"><span>' + (it === eqW ? '{{swords}} ' : '') + iN(it.id) + (it === eqW ? ' <small style="color:var(--gold-deep);">(đang cầm)</small>' : '') + '</span><span style="color:var(--tx-mut);font-size:12px;">' + (isW(it.id) ? it.u + ' lượt' : iT(it.id) === 32 ? it.u + ' lần' : 'dùng') + ' {{arrow}} Cất vào kho</span></button>';
     }).join('') || '<span style="color:var(--tx-mut);">(Trống)</span>') +
     '</div>';
   h += '<b>Kho Chung (Chạm để nhận cho ' + u.name + ')</b><div class="box-list">' +
@@ -2827,7 +3191,7 @@ function arena() {
       '<p>' + (win ? 'Thưởng: +' + prize + ' Vàng (lãi ' + (prize - fee) + 'v), +' + exp + ' Kinh nghiệm!' : 'Bị đánh bại! Mất ' + fee + ' Vàng tiền phí, nhưng học được +' + exp + ' Kinh nghiệm. Sinh lực không bị ảnh hưởng.') + '</p>' +
       '<button id="x" class="btn pri">Tiếp tục</button>'
     );
-    $('#x').onclick = () => arena();
+    $('#x').onclick = () => runPromotions().then(() => arena());
   });
   $('#x').onclick = camp;
 }
@@ -3042,6 +3406,8 @@ function title() {
         '• <b>Tấn công kép</b>: Tốc độ cao hơn địch từ 5 điểm trở lên sẽ đánh 2 lần liên tiếp.<br>' +
         '• <b>Tam Liên Chí Mạng</b>: Mỗi đòn trúng của quân ta có tỷ lệ nhỏ biến thành 3 đòn chí mạng liên tiếp.<br>' +
         '• <b>Lên cấp</b>: Mỗi lần thăng cấp, chiến binh được hồi đầy HP ngay lập tức.<br>' +
+        '• <b>Thăng tiến</b>: Đạt Cấp 15 và Cấp 25, chiến binh được chọn hướng đi mới (Hiệp sĩ, Rìu, Cung, Pháp sư, Kiếm sĩ, Linh mục...) với quân phục riêng và chỉ số tăng mạnh. Accor không thể đi theo nhánh phép thuật.<br>' +
+        '• <b>Gậy phép</b>: Gậy trị thương hồi máu đồng đội sát bên; Gậy tầm xa hồi từ xa; Đũa phép Aaron hồi cho mọi đồng đội quanh người dùng; Gậy sửa chữa phục hồi độ bền binh khí; Gậy dịch chuyển đưa đồng đội tới ô trống trong tầm. Hồi máu và tầm dịch chuyển tăng theo Phép.<br>' +
         '• <b>Địa hình</b>: Rừng, Núi, Nhà dân giúp tăng né tránh và phòng thủ.<br>' +
         '• <b>Đấu trường</b>: Có tính phí tham gia và giới hạn 3 trận mỗi chương để cân bằng cấp độ.<br>' +
         '• <b>Mã lưu</b>: Sao chép chuỗi mã lưu để tiếp tục chơi trên mọi thiết bị.' +
@@ -3109,7 +3475,7 @@ const HURL = u => {
 };
 
 function drawUnit(u, ts) {
-  const e = u.team == 2, j = u.job, dead = u.hp <= 0;
+  const e = u.team == 2, j = u.job, bj = CLS[j] ? CLS[j].sp : j, dead = u.hp <= 0;
   const atk = !!(u.atk && ts >= u.atk && ts - u.atk < 380);
   const ph = atk ? (ts - u.atk < 190 ? 2 : 3) : (Math.floor(ts / (u.mv ? 110 : 450)) % 2);
   const nm = ['stand1_', 'stand2_', 'attack1_', 'attack2_'][ph];
@@ -3160,9 +3526,9 @@ function drawUnit(u, ts) {
   const w = wpn(u), ty = w ? iT(w.id) : 0;
   let A = null, B = null;
   if (w && (u.mask & ty)) {
-    if (ty == 1) { A = WA[e ? 3 : 2]; B = WB[j == 8 || j == 12 ? 1 : 0]; }
-    else if (ty == 2) { A = WA[e ? 5 : 4]; B = WB[j == 8 || j == 12 ? 2 : 0]; }
-    else if (ty == 4) { A = WA[e ? 1 : 0]; B = WB[j == 5 || j == 9 ? 3 : 0]; }
+    if (ty == 1) { A = WA[e ? 3 : 2]; B = WB[bj == 8 || bj == 12 ? 1 : 0]; }
+    else if (ty == 2) { A = WA[e ? 5 : 4]; B = WB[bj == 8 || bj == 12 ? 2 : 0]; }
+    else if (ty == 4) { A = WA[e ? 1 : 0]; B = WB[bj == 5 || bj == 9 ? 3 : 0]; }
   }
   if (A) {
     const wi = SpriteSystem.raw['weapon_' + A[ph]];
@@ -3205,7 +3571,7 @@ function draw(ts) {
       });
     };
 
-    if (RNG) ov(RNG, 'rgba(59, 130, 246, ' + (0.28 + 0.12 * pu) + ')', 'rgba(147, 197, 253, 0.9)');
+    if (RNG) ov(RNG, MODE === 'warp' ? 'rgba(124, 58, 237, ' + (0.3 + 0.14 * pu) + ')' : 'rgba(59, 130, 246, ' + (0.28 + 0.12 * pu) + ')', MODE === 'warp' ? 'rgba(196, 181, 253, 0.95)' : 'rgba(147, 197, 253, 0.9)');
     if (MODE === 'target' && ATK) {
       ATK.forEach(o => {
         cx.fillStyle = 'rgba(239, 68, 68, ' + (0.35 + 0.2 * pu) + ')';
@@ -3394,7 +3760,7 @@ function click(e) {
   if (!inb(x, y)) return;
 
   const hit = U.filter(u => u.hp > 0).sort((a, b) => b.y - a.y).find(u => px >= u.x * T && px < u.x * T + T && py >= u.y * T - 12 && py < u.y * T + T);
-  if (hit && (MODE !== 'move' || !RNG || !RNG.has(x + ',' + y))) {
+  if (hit && !((MODE === 'move' || MODE === 'warp') && RNG && RNG.has(x + ',' + y))) {
     x = hit.x; y = hit.y;
   }
 
@@ -3422,6 +3788,11 @@ function click(e) {
     }
     SEL = null; RNG = null; MODE = '';
     menu(); renderSide();
+    return;
+  }
+
+  if (MODE === 'warp') {
+    if (WARP && RNG && RNG.has(x + ',' + y)) castWarp(WARP.u, WARP.s, WARP.o, x, y);
     return;
   }
 
@@ -3462,6 +3833,8 @@ function doCancel() {
     SEL = null; RNG = null; ATK = null; MODE = '';
   } else if (MODE === 'target') {
     MODE = 'act'; ATK = null;
+  } else if (MODE === 'warp') {
+    MODE = 'act'; RNG = null; WARP = null;
   } else {
     SEL = null; RNG = null; ATK = null; MODE = '';
   }
@@ -3482,7 +3855,7 @@ function menu() {
   cb.style.display = show ? 'block' : 'none';
   if (!show) { m.style.display = 'none'; return; }
 
-  cb.innerHTML = MODE === 'act' ? '{{undo}} Hoàn tác di chuyển (Esc)' : MODE === 'target' ? '{{undo}} Chọn lại hành động (Esc)' : '{{undo}} Bỏ chọn (Esc)';
+  cb.innerHTML = MODE === 'act' ? '{{undo}} Hoàn tác di chuyển (Esc)' : (MODE === 'target' || MODE === 'warp') ? '{{undo}} Chọn lại hành động (Esc)' : '{{undo}} Bỏ chọn (Esc)';
   cb.onclick = doCancel;
 
   if (MODE !== 'act') { m.style.display = 'none'; return; }
@@ -3548,14 +3921,14 @@ function visit(u) {
     t = 'Học hỏi bí kíp chiến thuật dân gian: +' + 35 + ' EXP!';
   }
   log('{{cottage}} ' + t);
-  dlg([{ h: '{{cottage}} ' + S[23], t }]).then(() => finish(u));
+  dlg([{ h: '{{cottage}} ' + S[23], t }]).then(() => runPromotions()).then(() => finish(u));
 }
 
 function trade(u, o) {
   const ns = U.filter(x => x.hp > 0 && x.team == 0 && x !== u && dist(x, u) == 1);
   if (!ns.length) return;
   o = o || ns[0];
-  const L = (a, k) => a.inv.map((it, i) => '<button data-' + k + '="' + i + '" class="btn"><span>' + iN(it.id) + '</span><span style="color:var(--tx-mut);">' + (isW(it.id) ? it.u : '') + '</span></button>').join('') || '<span style="color:var(--tx-mut);">(Trống)</span>';
+  const L = (a, k) => a.inv.map((it, i) => '<button data-' + k + '="' + i + '" class="btn"><span>' + iN(it.id) + '</span><span style="color:var(--tx-mut);">' + (iT(it.id) <= 32 ? it.u : '') + '</span></button>').join('') || '<span style="color:var(--tx-mut);">(Trống)</span>';
   openBox(
     '<h3>{{trade}} ' + S[31] + '</h3>' +
     '<div class="box-list" style="flex-direction:row;flex-wrap:wrap;">' + ns.map(x => '<button data-o="' + x.id + '" class="btn ' + (x === o ? 'pri' : '') + '">' + x.name + '</button>').join('') + '</div>' +
@@ -3615,6 +3988,7 @@ function attackMenu(u) {
 
 function useStaff(sel) {
   const u = SEL;
+  if (!u) return;
   const ok = stfs(u).filter(s => staffTargets(u, s).length);
   if (!ok.length) return;
   // Bước 1: chọn gậy (nếu có nhiều hơn 1 cây dùng được)
@@ -3622,7 +3996,7 @@ function useStaff(sel) {
     let h = '<h3>' + u.name + ' – Chọn Gậy</h3><div class="box-list">';
     ok.forEach((s, k) => {
       h += '<button data-s="' + k + '" class="btn"><span>{{heal}} ' + iN(s.id) + '</span>' +
-        '<span style="color:var(--tx-mut);">Hồi ' + staffHeal(s) + ' · Tầm ' + staffRange(s) + ' · ' + s.u + ' lần</span></button>';
+        '<span style="color:var(--tx-mut);font-size:12px;">' + staffBrief(s, u) + ' · ' + s.u + ' lần</span></button>';
     });
     h += '</div><button id="x" class="btn">Quay lại</button>';
     openBox(h);
@@ -3630,48 +4004,118 @@ function useStaff(sel) {
     $('#x').onclick = closeBox;
     return;
   }
-  const s = sel || ok[0], c = staffTargets(u, s);
+  const s = sel || ok[0], c = staffTargets(u, s), kd = stfDef(s).k;
   if (!c.length) return;
-  // Bước 2: chọn người được hồi (nếu có nhiều hơn 1 người trong tầm)
-  if (c.length === 1) return castStaff(u, s, c[0]);
+  // Đũa phép diện rộng: hồi cho tất cả cùng lúc, không cần chọn mục tiêu
+  if (kd === 'aoe') return castStaff(u, s, c);
+  // Bước 2: chọn mục tiêu (nếu có nhiều hơn 1 người trong tầm)
+  if (c.length === 1) return staffOn(u, s, c[0]);
+  const note = o => kd === 'repair' ? repairable(o).length + ' binh khí hư hại'
+    : kd === 'warp' ? o.hp + '/' + o.mhp + ' HP'
+    : o.hp + '/' + o.mhp + ' HP · +' + Math.min(staffHeal(s, u), o.mhp - o.hp);
   let h = '<h3>' + iN(s.id) + ' – Chọn Mục Tiêu</h3><div class="box-list">';
   c.forEach((o, k) => {
-    h += '<button data-t="' + k + '" class="btn"><span>' + o.name + '</span>' +
-      '<span style="color:var(--tx-mut);">' + o.hp + '/' + o.mhp + ' HP · +' + Math.min(staffHeal(s), o.mhp - o.hp) + '</span></button>';
+    h += '<button data-t="' + k + '" class="btn"><span>' + o.name + '</span><span style="color:var(--tx-mut);">' + note(o) + '</span></button>';
   });
   h += '</div><button id="x" class="btn">Quay lại</button>';
   openBox(h);
-  $('#box').querySelectorAll('[data-t]').forEach(b => b.onclick = () => { closeBox(); castStaff(u, s, c[+b.dataset.t]); });
+  $('#box').querySelectorAll('[data-t]').forEach(b => {
+    b.onmouseenter = () => { const o = c[+b.dataset.t]; CUR = { x: o.x, y: o.y }; }; // gậy tầm xa: chỉ rõ người ở đâu trên bản đồ
+    b.onclick = () => { closeBox(); staffOn(u, s, c[+b.dataset.t]); };
+  });
   $('#x').onclick = closeBox;
 }
 
-function castStaff(u, s, o) {
-  const healAmt = staffHeal(s);
-  const hp = Math.min(o.mhp, o.hp + healAmt);
-  const gainedHP = hp - o.hp;
-  o.hp = hp; o.hl = null;
+function staffOn(u, s, o) {
+  const kd = stfDef(s).k;
+  if (kd === 'repair') return repairPick(u, s, o);
+  if (kd === 'warp') return warpPick(u, s, o);
+  castStaff(u, s, o);
+}
 
-  AudioSystem.sfx.heal();
-  FX.push({ x: o.x, y: o.y, t: '+' + gainedHP, c: '#10b981', ts: performance.now() });
-  burst(o.x, o.y, '#10b981', 18, performance.now(), 55);
-  log(u.name + ' dùng ' + iN(s.id) + ' hồi phục ' + gainedHP + ' HP cho ' + o.name + '.');
-
+// Kết thúc 1 lần dùng gậy: trừ độ bền, cộng EXP, nhận thăng tiến nếu đủ cấp rồi mới hết lượt
+function endStaff(u, s, list, isHeal) {
   s.u--;
-  if (s.u <= 0) u.inv = u.inv.filter(i => i !== s);
-
-  const expGained = BalanceSystem.getStaffExp(u, o);
-  gain(u, expGained);
+  if (s.u <= 0) {
+    u.inv = u.inv.filter(i => i !== s);
+    log(u.name + ' mất ' + iN(s.id) + ' (hết lượt dùng).');
+  }
+  const exp = list.reduce((m, o, i) => i ? m + 3 : BalanceSystem.getStaffExp(u, o), 0);
+  gain(u, Math.min(exp, 30));
   G.stats = G.stats || {};
-  G.stats.heals = (G.stats.heals || 0) + 1;
+  if (isHeal) G.stats.heals = (G.stats.heals || 0) + 1;
   AchievementSystem.check();
-  finish(u);
+  runPromotions().then(() => finish(u));
+}
+
+// Hồi máu (1 người) hoặc hồi diện rộng (mảng người)
+function castStaff(u, s, tg) {
+  const list = Array.isArray(tg) ? tg : [tg], amt = staffHeal(s, u), t0 = performance.now();
+  let total = 0;
+  list.forEach((o, i) => {
+    const hp = Math.min(o.mhp, o.hp + amt), g = hp - o.hp;
+    o.hp = hp; o.hl = null; total += g;
+    FX.push({ x: o.x, y: o.y, t: '+' + g, c: '#10b981', ts: t0 + i * 120 });
+    burst(o.x, o.y, '#10b981', 18, t0 + i * 120, 55);
+  });
+  AudioSystem.sfx.heal();
+  log(u.name + ' dùng ' + iN(s.id) + ' hồi ' + total + ' HP cho ' + (list.length > 1 ? list.length + ' đồng đội' : list[0].name) + '.');
+  endStaff(u, s, list, true);
+}
+
+// Gậy sửa chữa: chọn binh khí hư hại rồi phục hồi đầy độ bền
+function repairPick(u, s, o) {
+  const dm = repairable(o);
+  if (dm.length === 1) return castRepair(u, s, o, dm[0]);
+  let h = '<h3>' + iN(s.id) + ' – Chọn Binh Khí Của ' + o.name + '</h3><div class="box-list">';
+  dm.forEach((it, k) => {
+    h += '<button data-r="' + k + '" class="btn"><span>' + iN(it.id) + '</span><span style="color:var(--tx-mut);">' + it.u + '/' + iS(it.id)[6] + ' lần</span></button>';
+  });
+  h += '</div><button id="x" class="btn">Quay lại</button>';
+  openBox(h);
+  $('#box').querySelectorAll('[data-r]').forEach(b => b.onclick = () => { closeBox(); castRepair(u, s, o, dm[+b.dataset.r]); });
+  $('#x').onclick = closeBox;
+}
+
+function castRepair(u, s, o, it) {
+  const mx = iS(it.id)[6] || it.u, add = mx - it.u, t0 = performance.now();
+  it.u = mx;
+  AudioSystem.sfx.heal();
+  FX.push({ x: o.x, y: o.y, t: 'Sửa +' + add, c: '#fbbf24', ts: t0 });
+  burst(o.x, o.y, '#fbbf24', 20, t0, 60);
+  log(u.name + ' dùng ' + iN(s.id) + ' sửa ' + iN(it.id) + ' của ' + o.name + ' (' + mx + '/' + mx + ' lần).');
+  endStaff(u, s, [o], false);
+}
+
+// Gậy dịch chuyển: chọn ô đích trên bản đồ (các ô tím)
+function warpPick(u, s, o) {
+  const tiles = warpTiles(u);
+  if (!tiles.size) return;
+  WARP = { u, s, o };
+  MODE = 'warp'; RNG = tiles; ATK = null;
+  BAN = { t: 'CHỌN Ô ĐÍCH CHO ' + o.name.toUpperCase(), c: '124, 58, 237', ts: performance.now() };
+  menu(); renderSide();
+}
+
+function castWarp(u, s, o, x, y) {
+  const t0 = performance.now(), ox = o.x, oy = o.y;
+  burst(ox, oy, '#a78bfa', 22, t0, 70);
+  FX.push({ x: ox, y: oy, t: 'Dịch chuyển', c: '#c4b5fd', ts: t0 });
+  o.x = x; o.y = y; o.mv = null;
+  burst(x, y, '#a78bfa', 26, t0 + 120, 80);
+  FX.push({ x, y, t: 'Xuất hiện!', c: '#c4b5fd', ts: t0 + 120, big: true });
+  AudioSystem.sfx.magic(true);
+  CUR = { x, y };
+  RNG = null; WARP = null; MODE = '';
+  log(u.name + ' dùng ' + iN(s.id) + ' đưa ' + o.name + ' tới ô (' + (x + 1) + ', ' + (y + 1) + ').');
+  endStaff(u, s, [o], false);
 }
 
 function invMenu() {
   const u = SEL;
   let h = '<h3>' + u.name + ' – Túi Đồ</h3><div class="box-list">';
   u.inv.forEach((it, k) => {
-    h += '<button data-k="' + k + '" class="btn"><span>' + (it === wpn(u) ? '{{swords}} ' : '') + iN(it.id) + '</span><span style="color:var(--tx-mut);">' + (isW(it.id) ? it.u + ' lượt' : 'dùng') + '</span></button>';
+    h += '<button data-k="' + k + '" class="btn"><span>' + (it === wpn(u) ? '{{swords}} ' : '') + iN(it.id) + '</span><span style="color:var(--tx-mut);">' + (isW(it.id) ? it.u + ' lượt' : iT(it.id) === 32 ? it.u + ' lần' : 'dùng') + '</span></button>';
   });
   h += '</div><button id="x" class="btn">Đóng</button>';
   openBox(h);
@@ -3681,7 +4125,7 @@ function invMenu() {
 
 function itemAct(u, k) {
   const it = u.inv[k], t = iT(it.id);
-  let h = '<h3>' + iN(it.id) + '</h3><div class="box-list">';
+  let h = '<h3>' + iN(it.id) + '</h3>' + (t === 32 ? '<div class="box-desc" style="font-size:12.5px;">' + staffBrief(it, u) + '</div>' : '') + '<div class="box-list">';
   if (t < 32 && (u.mask & t)) h += '<button id="eq" class="btn pri">Trang bị vũ khí chính</button>';
   if (t === 64) h += '<button id="us" class="btn pri">Sử dụng dược phẩm</button>';
   h += '<button id="st" class="btn">Gửi vào kho chung</button><button id="dr" class="btn danger">Vứt bỏ</button></div><button id="x" class="btn">Đóng</button>';
@@ -3974,6 +4418,7 @@ function confirmAtk(a, d) {
     const n = battle(a, d);
     CUR = { x: d.x, y: d.y };
     await wait(520 * n + 700);
+    await runPromotions();
     BUSY = false;
     hud(); renderSide();
     if (a.hp > 0) finish(a);
@@ -4111,7 +4556,7 @@ function renderSide(u) {
 
     h += '<div class="card-unit ' + ['pl', 'al', 'en'][u.team] + '">' +
       '<div class="unit-avatar"><img src="' + HURL(u) + '"></div>' +
-      '<div class="unit-meta"><h4>' + u.name + '</h4><small>' + JOBN(u.job) + ' · Cấp ' + (u.lv + 1) + '</small></div>' +
+      '<div class="unit-meta"><h4>' + u.name + '</h4><small>' + JOBN(u.job) + (u.tier ? ' ' + '★'.repeat(u.tier) : '') + ' · Cấp ' + (u.lv + 1) + '</small></div>' +
     '</div>';
 
     h += '<div class="meter-group">' +
@@ -4123,7 +4568,7 @@ function renderSide(u) {
       h += '<div class="meter-group">' +
         '<div class="meter-label"><span>Kinh Nghiệm</span><span>' + u.exp + '/100</span></div>' +
         bar(u.exp, 100, 'exp-blue') +
-      '</div>';
+      '</div>' + promoHint(u);
     }
 
     h += '<div class="stat-grid">' +
@@ -4131,7 +4576,7 @@ function renderSide(u) {
     '</div>';
 
     h += '<b>Binh Khí & Dược Phẩm:</b><div class="inv-list">' +
-      (u.inv.map(i => '<div class="inv-item ' + (i === w ? 'equipped' : '') + '"><span>' + (i === w ? '{{swords}} ' : '') + iN(i.id) + '</span><i>' + (isW(i.id) ? i.u + ' lần' : 'dùng') + '</i></div>').join('') || '<span style="color:var(--tx-mut);">(Không mang đồ)</span>') +
+      (u.inv.map(i => '<div class="inv-item ' + (i === w ? 'equipped' : '') + '"><span>' + (i === w ? '{{swords}} ' : '') + iN(i.id) + '</span><i>' + (iT(i.id) <= 32 ? i.u + ' lần' : 'dùng') + '</i></div>').join('') || '<span style="color:var(--tx-mut);">(Không mang đồ)</span>') +
     '</div>';
   } else {
     h += '<div style="text-align:center;padding:24px 10px;color:var(--tx-mut);">' +
