@@ -732,6 +732,19 @@ html, body { width: 100%; overscroll-behavior: none; }
 @media (max-width: 560px) {
   .promo-grid, .promo-diffs { grid-template-columns: 1fr; }
 }
+
+/* ===== CHẾ ĐỘ NHẸ (bật trong Cài Đặt): bỏ hiệu ứng mờ, bóng đổ, chuyển động để máy yếu đỡ giật ===== */
+body.lite *, body.lite *::before, body.lite *::after {
+  animation: none !important; transition: none !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  box-shadow: none !important; text-shadow: none !important;
+}
+body.lite #modal { background: rgba(10, 12, 24, 0.88) !important; }
+body.lite #boxWrap { filter: none !important; }
+body.lite #boxWrap::before { display: none !important; }
+body.lite #box { background: #fbf4e2 !important; border: 2px solid var(--gold-pri) !important; clip-path: none !important; }
+body.lite #hud, body.lite #side, body.lite #menu { background: #fffdf8 !important; }
+body.lite .hud-pill, body.lite .turn-herald, body.lite .btn { filter: none !important; }
 </style>
 </head>
 <body>
@@ -826,7 +839,8 @@ const IC = (() => {
     cursor: P('M6 2l13 11h-6.5l3.5 7-3 1.5-3.5-7L6 19z') + K('M6 2l13 11h-6.5L6 19z'),
     skip: P('M3 4l8 8-8 8zM12 4l8 8-8 8z'),
     caret: P('M4 8h16l-8 9z'),
-    nextu: P('M2 10.5h9V6.5l7 5.5-7 5.5v-4H2z') + P('M19.5 5H22v14h-2.5z')
+    nextu: P('M2 10.5h9V6.5l7 5.5-7 5.5v-4H2z') + P('M19.5 5H22v14h-2.5z'),
+    gear: '<path fill-rule="evenodd" d="M10 2h4l.7 2.6 1.9.8 2.3-1.4 2.8 2.8-1.4 2.3.8 1.9L22 10v4l-2.6.7-.8 1.9 1.4 2.3-2.8 2.8-2.3-1.4-1.9.8L14 22h-4l-.7-2.6-1.9-.8-2.3 1.4-2.8-2.8 1.4-2.3-.8-1.9L2 14v-4l2.6-.7.8-1.9-1.4-2.3 2.8-2.8 2.3 1.4 1.9-.8zM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z"/>'
   };
 })();
 const ic = n => '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + (IC[n] || '') + '</svg>';
@@ -836,6 +850,24 @@ const icX = t => t.replace(/\{\{(\w+)\}\}/g, (_, n) => ic(n));
   Object.defineProperty(Element.prototype, 'innerHTML', { configurable: true, enumerable: d.enumerable, get: d.get,
     set(v) { d.set.call(this, typeof v === 'string' && v.indexOf('{{') > -1 ? icX(v) : v); } });
 })();
+
+/* ===== CÀI ĐẶT HIỆU NĂNG: Chế độ nhẹ cho máy yếu (lưu riêng từng thiết bị, không nằm trong mã lưu) ===== */
+const PERF = {
+  lite: false, last: 0,
+  init() {
+    try { this.lite = localStorage.getItem('ha1_lite') === '1'; } catch (e) {}
+    this.apply(false);
+  },
+  set(on) {
+    this.lite = !!on;
+    try { localStorage.setItem('ha1_lite', this.lite ? '1' : '0'); } catch (e) {}
+    this.apply(true);
+  },
+  apply(refit) {
+    document.body.classList.toggle('lite', this.lite);
+    if (refit) fit(); // đổi độ phân giải canvas ngay
+  }
+};
 
 /* ============================================================
    1. CORE GAME ASSET DATA & SOUND DEFINITION
@@ -1991,15 +2023,16 @@ const StorageSystem = {
 
   importCode(codeStr) {
     try {
-      const clean = codeStr.trim();
-      if (!clean.startsWith('HA1-V2-')) return false;
-      const parts = clean.split('-');
-      if (parts.length < 4) return false;
-      const b64 = parts[2];
+      // Bỏ mọi khoảng trắng/xuống dòng/ký tự vô hình (hay bị chèn khi dán từ Zalo, ghi chú, tệp...)
+      const clean = String(codeStr || '').replace(/[\s\u200B-\u200D\uFEFF]+/g, '');
+      const m = clean.match(/HA1-V2-([A-Za-z0-9+\/]+={0,2})(?:-[0-9A-Fa-f]+)?/);
+      if (!m) return false;
+      const b64 = m[1];
       const json = decodeURIComponent(atob(b64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
       const parsed = JSON.parse(json);
       if (parsed && typeof parsed.ch === 'number' && Array.isArray(parsed.roster)) {
         G = parsed;
+        if (!G.avail) G.avail = [...Array(Math.min((G.cleared || 0) + 1, 10)).keys()];
         G.achieved = G.achieved || [];
         G.endings = G.endings || [];
         G.stats = G.stats || { crits: 0, heals: 0, arenaWins: 0, rogueFloors: 0 };
@@ -3016,6 +3049,7 @@ function camp() {
       '<button id="achBtn" class="btn">{{trophy}} Thành Tựu</button>' +
       '<button id="ch" class="btn">{{map}} Bản Đồ</button>' +
       '<button id="codeBtn" class="btn">{{tablet}} Mã Lưu</button>' +
+      '<button id="setBtn" class="btn">{{gear}} Cài Đặt</button>' +
       '<button id="infoBtn" class="btn">{{info}} Tác Giả</button>' +
       '<button id="tt" class="btn">{{gate}} Màn Hình Chính</button>' +
     '</div>'
@@ -3028,6 +3062,7 @@ function camp() {
   $('#survBtn').onclick = survivalMode;
   $('#achBtn').onclick = achievementsModal;
   $('#codeBtn').onclick = saveCodeModal;
+  $('#setBtn').onclick = settingsModal;
   $('#infoBtn').onclick = gameInfoModal;
   $('#tt').onclick = () => { closeBox(); title(); };
   $('#ch').onclick = () => {
@@ -3119,7 +3154,7 @@ function stash(uid) {
   $('#x').onclick = camp;
 }
 
-const ARENA_MAX = 8; // số lượt Đấu Trường tối đa mỗi chương
+const ARENA_MAX = 3; // số lượt Đấu Trường tối đa mỗi chương
 function arena() {
   const us = G.roster;
   let h = '<h3>{{arena}} Đấu Trường</h3>' +
@@ -3273,42 +3308,128 @@ function saveCodeModal() {
     '<textarea id="codeImport" placeholder="Dán mã HA1-V2-... vào đây" style="width:100%;height:60px;border-radius:8px;border:1px solid var(--pn-border);padding:8px;font-family:inherit;font-size:12px;resize:none;word-break:break-all;"></textarea>' +
     '<div style="display:flex;gap:8px;margin-top:8px;">' +
       '<button id="applyCode" class="btn pri" style="flex:1;">{{import}} Nạp Mã</button>' +
+      '<button id="openFile" class="btn" style="flex:1;">{{save}} Nạp Từ Tệp</button>' +
       '<button id="x" class="btn">Đóng</button>' +
-    '</div>';
+    '</div>' +
+    '<input type="file" id="codeFile" style="display:none;">' +
+    '<div id="codeMsg" style="font-size:12px;color:var(--tx-sec);margin-top:8px;min-height:16px;"></div>';
   openBox(h);
+  const say = s => { const m = $('#codeMsg'); if (m) m.textContent = s; };
 
+  // Sao chép: dùng Clipboard API, nếu trình duyệt không cho (http, webview, iOS...) thì dùng execCommand
   $('#copyCode').onclick = () => {
     const el = $('#codeExport');
-    el.select();
-    navigator.clipboard.writeText(el.value).then(() => {
-      $('#copyCode').innerHTML = '{{check}} Đã sao chép!';
-      setTimeout(() => { if ($('#copyCode')) $('#copyCode').innerHTML = '{{tablet}} Sao Chép'; }, 2000);
-    });
+    if (!el.value) { say('Chưa có dữ liệu để sao chép.'); return; }
+    const fallbackCopy = () => {
+      let ok = false;
+      try {
+        el.removeAttribute('readonly');
+        el.focus(); el.select(); el.setSelectionRange(0, el.value.length);
+        ok = document.execCommand('copy');
+      } catch (e) {}
+      el.setAttribute('readonly', '');
+      return ok;
+    };
+    const done = ok => {
+      const b = $('#copyCode'); if (!b) return;
+      if (ok) {
+        b.innerHTML = '{{check}} Đã sao chép!';
+        setTimeout(() => { if ($('#copyCode')) $('#copyCode').innerHTML = '{{tablet}} Sao Chép'; }, 2000);
+        say('');
+      } else {
+        el.focus(); el.select();
+        say('Máy không cho tự sao chép. Mã đã được chọn sẵn, hãy giữ vào ô mã rồi bấm Sao chép/Copy.');
+      }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+      navigator.clipboard.writeText(el.value).then(() => done(true), () => done(fallbackCopy()));
+    } else {
+      done(fallbackCopy());
+    }
   };
 
+  // Tải tệp: gắn <a> vào trang, và chỉ thu hồi URL sau khi trình duyệt đã bắt đầu tải
   $('#downloadFile').onclick = () => {
-    const blob = new Blob([code], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'hoa_an_1_save.ha1';
-    a.click();
-    URL.revokeObjectURL(url);
+    const text = $('#codeExport').value;
+    if (!text) { say('Chưa có dữ liệu để tải. Hãy bắt đầu hoặc tiếp tục một ván chơi trước.'); return; }
+    try {
+      const blob = new Blob([text], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'hoa_an_1_save.ha1';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 4000);
+      say('Đã gửi lệnh tải tệp. Nếu trình duyệt không tải được, hãy bấm Sao Chép rồi dán vào ghi chú để lưu.');
+    } catch (e) {
+      say('Trình duyệt này không hỗ trợ tải tệp. Hãy bấm Sao Chép rồi dán vào ghi chú để lưu.');
+    }
   };
 
-  $('#applyCode').onclick = () => {
-    const val = $('#codeImport').value;
+  // Nạp mã: dùng chung cho dán tay và đọc từ tệp
+  const applyCodeText = val => {
+    if (!String(val || '').trim()) { say('Hãy dán mã lưu vào ô trước khi bấm Nạp Mã.'); return; }
     if (StorageSystem.importCode(val)) {
       alert('Khôi phục dữ liệu thành công!');
       if (PHASE === 'camp') camp();
+      else if (PHASE === 'title') { closeBox(); camp(); }
       else title();
     } else {
+      say('Mã lưu không hợp lệ hoặc bị thiếu ký tự. Hãy sao chép lại đầy đủ từ "HA1-V2-" đến hết.');
       alert('Mã lưu không hợp lệ!');
     }
   };
 
+  $('#applyCode').onclick = () => applyCodeText($('#codeImport').value);
+
+  // Nạp từ tệp .ha1 đã tải trước đó (không đặt accept để điện thoại không làm mờ tệp lạ)
+  $('#openFile').onclick = () => $('#codeFile').click();
+  $('#codeFile').onchange = e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => { $('#codeImport').value = String(r.result || ''); applyCodeText(r.result); };
+    r.onerror = () => say('Không đọc được tệp này.');
+    r.readAsText(f);
+  };
+
+  // Đóng: ở màn hình chính phải vẽ lại menu, nếu không màn hình sẽ trống
   $('#x').onclick = () => {
     closeBox();
     if (PHASE === 'camp') camp();
+    else if (PHASE === 'title') title();
+  };
+}
+
+function settingsModal() {
+  const h = '<h3>{{gear}} Cài Đặt</h3>' +
+    '<div style="padding:10px 14px;background:#fefcf6;border:1px solid var(--pn-border);margin-bottom:12px;">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
+        '<b>Chế độ nhẹ (máy yếu)</b>' +
+        '<button id="liteToggle" class="btn" style="min-width:96px;"></button>' +
+      '</div>' +
+      '<div style="font-size:11.5px;color:var(--tx-sec);margin-top:6px;line-height:1.5;">' +
+        'Tối giản giao diện cho máy cũ bị giật, lag: tắt hiệu ứng mờ, bóng đổ, chuyển động; giảm độ phân giải; giới hạn 30 khung hình/giây; ' +
+        'giảm hiệu ứng khi vẽ nhân vật. Cài đặt này chỉ lưu trên thiết bị này.' +
+      '</div>' +
+    '</div>' +
+    '<div class="box-list"><button id="x" class="btn">Đóng</button></div>';
+  openBox(h);
+
+  const paint = () => {
+    const b = $('#liteToggle');
+    b.className = 'btn' + (PERF.lite ? ' pri' : '');
+    b.setAttribute('aria-pressed', PERF.lite ? 'true' : 'false');
+    b.textContent = PERF.lite ? 'ĐANG BẬT' : 'ĐANG TẮT';
+  };
+  paint();
+  $('#liteToggle').onclick = () => { PERF.set(!PERF.lite); paint(); };
+
+  $('#x').onclick = () => {
+    closeBox();
+    if (PHASE === 'camp') camp();
+    else if (PHASE === 'title') title();
   };
 }
 
@@ -3369,6 +3490,7 @@ function title() {
         '<button id="btnNew" class="btn pri">{{swords}} Trò Chơi Mới</button>' +
         (sv ? '<button id="btnCont" class="btn">{{play}} Tiếp Tục</button>' : '') +
         '<button id="btnLoadCode" class="btn">{{import}} Nhập Mã Lưu</button>' +
+        '<button id="btnSettings" class="btn">{{gear}} Cài Đặt</button>' +
         '<button id="btnHelp" class="btn">{{scroll}} Hướng Dẫn</button>' +
         '<button id="btnInfo" class="btn">{{info}} Tác Giả</button>' +
       '</div>' +
@@ -3395,6 +3517,7 @@ function title() {
   };
 
   $('#btnLoadCode').onclick = saveCodeModal;
+  $('#btnSettings').onclick = settingsModal;
   $('#btnInfo').onclick = gameInfoModal;
 
   $('#btnHelp').onclick = () => {
@@ -3433,7 +3556,7 @@ function fit() {
   const sh = st.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
   const lw = LOGW(), lh = LOGH();
   const k = Math.max(0.25, Math.min(sw / lw, sh / lh, 4));
-  const dr = Math.min(window.devicePixelRatio || 1, 2);
+  const dr = PERF.lite ? 1 : Math.min(window.devicePixelRatio || 1, 2);
   const cw = Math.floor(lw * k), ch = Math.floor(lh * k);
   cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
   const w = Math.round(cw * dr), h = Math.round(ch * dr);
@@ -3510,6 +3633,10 @@ function drawUnit(u, ts) {
     cx.globalAlpha = 1 - p;
     fl = 'brightness(' + (1 + 2 * (1 - p)) + ')';
   }
+  if (PERF.lite) { // chế độ nhẹ: bỏ bộ lọc sáng/xám nặng, chỉ giữ màu phe; đơn vị đã đi thì làm mờ
+    fl = f;
+    if (u.done && u.team == 0 && !dead) cx.globalAlpha = 0.55;
+  }
   cx.filter = fl || 'none';
 
   if (!dead && !u.mv) {
@@ -3539,6 +3666,8 @@ function drawUnit(u, ts) {
 
 function draw(ts) {
   ts = ts || performance.now();
+  if (PERF.lite && ts - PERF.last < 30) { requestAnimationFrame(draw); return; } // chế độ nhẹ: tối đa ~30 khung hình/giây
+  PERF.last = ts;
   const lw = LOGW(), lh = LOGH();
 
   if (MAP) {
@@ -3618,7 +3747,7 @@ function draw(ts) {
         cx.strokeStyle = f.crit ? '#f5cb5c' : '#ffffff';
         cx.lineWidth = f.crit ? 5 : 3;
         cx.shadowColor = f.crit ? '#d49a24' : '#93c5fd';
-        cx.shadowBlur = 8;
+        cx.shadowBlur = PERF.lite ? 0 : 8;
         for (const o of f.crit ? [-3, 3] : [0]) {
           cx.beginPath();
           cx.moveTo(c0 - 12 + o, c1 - 14);
@@ -3629,7 +3758,7 @@ function draw(ts) {
       } else if (f.k == 'bolt') {
         const p = Math.min(1, dt / 220), x0 = f.x0 * T + T / 2, y0 = f.y0 * T + T / 2;
         cx.save();
-        cx.fillStyle = f.c; cx.shadowColor = f.c; cx.shadowBlur = 10;
+        cx.fillStyle = f.c; cx.shadowColor = f.c; cx.shadowBlur = PERF.lite ? 0 : 10;
         cx.beginPath();
         cx.arc(x0 + (c0 - x0) * p, y0 + (c1 - y0) * p - 4, 4, 0, 7);
         cx.fill();
@@ -3738,7 +3867,7 @@ function draw(ts) {
       cx.drawImage(im, 320 - im.width * 1.1, 15, im.width * 2.2, im.height * 2.2);
       cx.globalAlpha = 1;
     }
-    for (let i = 0; i < 46; i++) {
+    for (let i = 0, n = PERF.lite ? 14 : 46; i < n; i++) {
       const sp = 0.012 * (1 + i % 4);
       const x = (i * 83.7 + Math.sin(ts / 1700 + i) * 16) % 640;
       const y = 400 - ((ts * sp * 3 + i * 61) % 430);
@@ -4485,6 +4614,7 @@ function hud() {
 
   h += '<button id="bInfo" class="btn" title="Tác giả">{{info}}</button>' +
        '<button id="bSoundStudio" class="btn" title="Âm thanh">{{note}}<span class="lbl"> Âm Điệu</span></button>' +
+       '<button id="bSettings" class="btn icon-only" title="Cài đặt">{{gear}}</button>' +
        '<button id="bMu" class="btn icon-only" title="Bật/Tắt âm thanh">' + (AudioSystem.mute ? '{{mute}}' : '{{sound}}') + '</button>';
 
   if (G && MAP) {
@@ -4504,6 +4634,7 @@ function hud() {
     log('{{save}} Dữ liệu đã được lưu tự động.');
   };
   if ($('#bSoundStudio')) $('#bSoundStudio').onclick = soundStudioModal;
+  if ($('#bSettings')) $('#bSettings').onclick = settingsModal;
   $('#bMu').onclick = () => {
     const isMuted = AudioSystem.toggleMute();
     $('#bMu').innerHTML = isMuted ? '{{mute}}' : '{{sound}}';
@@ -4617,6 +4748,7 @@ function bindEvents() {
   cv.addEventListener('click', click);
   addEventListener('keydown', e => {
     if ($('#modal').classList.contains('on')) {
+      if (e.target && /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return;
       if (e.key === 'Enter') {
         const b = $('#nx') || $('#y') || $('#x');
         if (b) b.click();
@@ -4644,6 +4776,7 @@ function bindEvents() {
 }
 
 function boot() {
+  PERF.init();
   bindEvents();
   document.querySelectorAll('#tabUnit,#tabLog,#tabQuest,#cancel').forEach(e => { e.innerHTML = e.innerHTML; });
   SpriteSystem.init(() => {
