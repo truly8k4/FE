@@ -1828,10 +1828,11 @@ const BalanceSystem = {
 
   triggerSquadAlert(targetUnit, allUnits) {
     if (targetUnit.team !== 2) return;
-    targetUnit.ai = 1;
+    const keep = u => u.boss || u.ai === 2; // chủ tướng/lính canh giữ chỗ: chỉ báo động, không bỏ trận địa
+    if (keep(targetUnit)) targetUnit.alert = true; else targetUnit.ai = 1;
     allUnits.forEach(u => {
       if (u.team === 2 && u.hp > 0 && Math.abs(u.x - targetUnit.x) + Math.abs(u.y - targetUnit.y) <= 4) {
-        u.ai = 1;
+        if (keep(u)) u.alert = true; else u.ai = 1;
       }
     });
   },
@@ -2188,7 +2189,7 @@ const GEN = [
   {
     tag: 'Nhánh Đại Hòa Ước Thần Thánh', title: 'Bình Minh Hòa Ước', goal: 'Đánh bại Tà Giáo Chủ điều khiển chiến tranh Sofia - Gailu.',
     biome: 'frost', seed: 99, w: 22, h: 22, th: TH2, lv: 18, n: 22,
-    boss: { id: 100, lv: 22, job: 12, items: [58, 62], pos: [11, 3] },
+    boss: { id: 100, lv: 22, job: 10, items: [58, 62], pos: [11, 3] },
     intro: 'Tại ranh giới băng giá giữa Sofia và Gailu, thủ phạm thực sự thao túng cả Desai lẫn triều đình Gailu đã lộ diện: Hội tà giáo Hắc Long. Tướng lĩnh hai quốc gia cùng kề vai sát cánh!',
     lines: [
       'Tướng quân Gailu: “Chúng ta đã bị lừa gạt suốt mười năm qua!”',
@@ -2200,41 +2201,233 @@ const GEN = [
   }
 ];
 
-function buildGen(i) {
-  const g = GEN[i], m = genMap(g.seed, g.w, g.h, g.th), U2 = [], js = [5, 6, 7, 8, 9, 10, 11, 12];
-  seed = g.seed + 99;
-  for (let k = 0; k < g.n; k++) {
-    const j = js[srnd(js.length)];
-    const p = freeNearM(m, 2 + srnd(g.w - 4), 1 + srnd(5), U2);
-    const e = spawn(j, g.lv + srnd(3), 2, p[0], p[1], 110 + k, WSJ[j].concat(srnd(3) === 0 ? [41] : []), false);
-    e.ai = k % 3 === 0 ? 1 : 0;
-    U2.push(e);
+
+
+/* ===== BẢN ĐỒ TUYẾN PHỤ v2: mỗi chương một bố cục & lối đánh riêng (thay cho rải địa hình ngẫu nhiên giống hệt nhau) ===== */
+const terrOf = t => t == 0 ? 4 : t < 3 ? 5 : t < 5 ? 6 : t == 5 ? 7 : t < 10 ? 8 : t < 12 ? 2 : t < 21 ? 8 : t < 30 ? 3 : t < 32 ? 1 : t < 35 ? 2 : 8;
+const tCost = t => COST[terrOf(t)];
+const GRS = [25, 25, 25, 25, 25, 22, 28], SND = [30, 30, 30, 30, 31], STN = [32, 32, 32, 32, 34], CLF = [13, 14, 14, 19], WAL = [6, 7, 8, 9];
+
+function brush(w, h, ground) {
+  const t = new Array(w * h).fill(25), pick = c => Array.isArray(c) ? c[srnd(c.length)] : c;
+  const B = {
+    t,
+    set(x, y, c) { if (x >= 0 && y >= 0 && x < w && y < h) t[y * w + x] = pick(c); },
+    rect(c, x0, y0, x1, y1) { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) B.set(x, y, c); },
+    pts(c, l) { l.forEach(p => B.set(p[0], p[1], c)); },
+    blob(c, cx, cy, r) { for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) if (Math.abs(dx) + Math.abs(dy) <= r) B.set(cx + dx, cy + dy, c); },
+    scat(c, n, x0, y0, x1, y1) { for (let i = 0; i < n; i++) B.set(x0 + srnd(x1 - x0 + 1), y0 + srnd(y1 - y0 + 1), c); },
+    hwall(y, x0, x1, gaps) { B.rect(WAL, x0, y, x1, y); gaps.forEach(x => B.set(x, y, 33)); },
+    fort(x0, y0, x1, y1, gaps, tw) {
+      B.rect(WAL, x0, y0, x1, y0); B.rect(WAL, x0, y1, x1, y1);
+      B.rect(12, x0, y0 + 1, x0, y1 - 1); B.rect(12, x1, y0 + 1, x1, y1 - 1);
+      if (tw) B.pts([35, 36], [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]);
+      gaps.forEach(g => B.set(g[0], g[1], 33));
+    }
+  };
+  B.rect(ground, 0, 0, w - 1, h - 1);
+  return B;
+}
+
+/* zones: [x0, y0, x1, y1, số quân, ai (0 canh gác · 1 truy kích · 2 xen kẽ), danh sách lớp (tuỳ chọn)]
+   lts (tướng lĩnh): [id, tên, lớp, cấp cộng thêm, vật phẩm, x, y, ai] */
+const LAY = [
+  { // 11 · Rừng Ramsey: rừng rậm, mỏm đá chia đôi đường tiến, trại địch sau hàng rào rừng
+    ground: GRS, floor: 25, mix: [5, 5, 5, 7, 7, 8, 12],
+    paint(p) {
+      [[2, 4, 2], [1, 9, 2], [3, 13, 2], [6, 6, 2], [7, 10, 2], [5, 15, 1], [11, 7, 2], [12, 12, 2], [15, 9, 2], [15, 15, 1], [8, 3, 1], [16, 5, 1]].forEach(b => p.blob(3, b[0], b[1], b[2]));
+      p.rect(CLF, 9, 6, 10, 7); p.pts(CLF, [[13, 10], [4, 8], [14, 13]]);
+      p.rect(CLF, 15, 0, 17, 1); p.rect(1, 10, 0, 14, 0);
+      p.rect(3, 9, 4, 16, 4); p.pts(25, [[12, 4], [13, 4]]);
+      p.pts(5, [[2, 7], [16, 7], [5, 13], [14, 2]]);
+    },
+    zones: [[10, 1, 16, 3, 4, 0], [8, 5, 16, 6, 2, 1], [1, 4, 5, 12, 3, 0], [5, 1, 9, 5, 3, 1]],
+    lts: [[141, 'Cung Thủ Mắt Quạ Rennik', 11, 2, [24, 41], 11, 3, 0], [142, 'Kỵ Binh Cướp Brux', 12, 2, [12, 41], 5, 5, 1]]
+  },
+  { // 12 · Hang Rồng Ignis: hẻm núi hình chữ S, hành lang hẹp dẫn lên hang rồng
+    ground: CLF, floor: 30, mix: [5, 6, 6, 9, 11, 12],
+    paint(p) {
+      p.rect(SND, 1, 15, 14, 19); p.rect(SND, 11, 10, 15, 14); p.rect(SND, 3, 7, 16, 10);
+      p.rect(SND, 3, 3, 6, 7); p.rect(SND, 3, 1, 16, 4); p.rect(SND, 17, 8, 18, 9);
+      p.pts(CLF, [[7, 8], [10, 9], [13, 8], [6, 2], [14, 3], [5, 16], [13, 16]]);
+      p.scat(0, 9, 3, 1, 16, 4); p.scat(0, 4, 1, 15, 14, 16); p.scat(1, 6, 3, 7, 16, 10);
+      p.pts(5, [[18, 8]]);
+    },
+    zones: [[4, 1, 15, 4, 4, 0], [4, 7, 15, 10, 5, 2], [3, 5, 6, 6, 2, 0], [11, 11, 15, 13, 4, 1]],
+    lts: [[143, 'Pháp Sư Lửa Kael', 10, 2, [31, 41], 7, 3, 0], [144, 'Hộ Vệ Rồng Dorn', 9, 2, [21, 41], 10, 4, 0], [145, 'Xạ Thủ Vảy Đỏ Ysa', 11, 1, [24, 41], 13, 2, 0]]
+  },
+  { // 13 · Ngai Vàng Sofia: cung điện ba lớp tường, ba cổng, đại sảnh có vườn và cột đá
+    ground: STN, floor: 32, mix: [8, 8, 12, 12, 10, 11, 6],
+    paint(p) {
+      p.hwall(10, 0, 19, [3, 9, 10, 16]); p.pts([35, 36], [[0, 10], [19, 10], [8, 10], [11, 10]]);
+      p.hwall(5, 0, 19, [2, 9, 10, 17]); p.pts([35, 36], [[0, 5], [19, 5], [8, 5], [11, 5]]);
+      p.rect(GRS, 1, 6, 3, 9); p.rect(GRS, 16, 6, 18, 9); p.pts(3, [[2, 7], [17, 8], [1, 9], [18, 6], [2, 13], [17, 13]]);
+      p.pts(12, [[6, 7], [6, 8], [13, 7], [13, 8], [7, 2], [12, 2], [7, 4], [12, 4]]);
+      p.rect(34, 8, 1, 11, 1); p.pts(5, [[1, 15], [18, 15]]);
+    },
+    zones: [[5, 1, 14, 4, 5, 0], [1, 6, 18, 9, 8, 2], [1, 12, 18, 14, 5, 1]],
+    lts: [[146, 'Cấm Vệ Trưởng Gorran', 12, 2, [11, 41], 9, 3, 0], [147, 'Đại Pháp Sư Syrah', 10, 2, [31, 41], 11, 3, 0], [148, 'Cung Thủ Ngự Lâm Thorne', 11, 2, [24, 41], 15, 7, 1]]
+  },
+  { // 14 · Thành Phố Ngầm Vallas: lưới phố ngầm, khối nhà đặc xen quảng trường, đại lao ở giữa phía bắc
+    ground: STN, floor: 32, mix: [6, 6, 9, 9, 10, 5, 11],
+    paint(p) {
+      for (const by of [7, 12]) for (const bx of [2, 7, 12, 17]) {
+        const r = srnd(10);
+        if (r < 7) { p.rect(WAL, bx, by, bx + 2, by); p.rect(12, bx, by + 1, bx + 2, by + 1); p.rect(WAL, bx, by + 2, bx + 2, by + 2); }
+        else if (r < 9) { p.pts([35, 36], [[bx, by], [bx + 2, by], [bx, by + 2], [bx + 2, by + 2]]); p.rect(34, bx + 1, by + 1, bx + 1, by + 1); }
+        else p.pts(5, [[bx + 1, by + 1]]);
+      }
+      p.rect(WAL, 2, 2, 4, 2); p.rect(12, 2, 3, 4, 3); p.rect(WAL, 2, 4, 4, 4);
+      p.rect(WAL, 17, 2, 19, 2); p.rect(12, 17, 3, 19, 3); p.rect(WAL, 17, 4, 19, 4);
+      p.fort(6, 0, 15, 4, [[10, 4], [11, 4], [6, 2], [15, 2]], true);
+    },
+    zones: [[7, 1, 14, 3, 4, 0], [0, 5, 19, 6, 4, 1], [0, 10, 19, 11, 4, 0], [0, 0, 1, 14, 2, 0], [18, 0, 19, 14, 2, 0]],
+    lts: [[149, 'Cai Ngục Mortis', 9, 2, [21, 41], 8, 3, 0], [150, 'Nữ Pháp Sư Hắc Ám Nyx', 10, 2, [31, 41], 13, 2, 0]]
+  },
+  { // 15 · Đêm Huyết Nguyệt: thủ trong vòng thành tròn bốn cổng giữa hoang mạc, quân địch tràn từ các cửa ải
+    ground: SND, floor: 32, mix: [5, 6, 7, 8, 9, 10, 11, 12], dep: [5, 6, 8, 3],
+    spawns: [[8, 0], [9, 0], [8, 17], [9, 17], [0, 8], [0, 9], [17, 8], [17, 9], [1, 1], [16, 1], [1, 16], [16, 16]],
+    caps: { 4: [[151, 'Huyết Tướng Karn', 9, 2, [21, 41]]], 8: [[152, 'Huyết Pháp Sư Ozen', 10, 2, [31, 41]], [153, 'Huyết Kỵ Sĩ Valk', 12, 2, [12, 41]]] },
+    paint(p) {
+      p.scat(12, 7, 0, 0, 17, 3); p.scat(12, 7, 0, 14, 17, 17); p.scat(12, 5, 0, 4, 3, 13); p.scat(12, 5, 14, 4, 17, 13);
+      p.scat(1, 10, 0, 0, 17, 17); p.scat(0, 12, 0, 0, 17, 17);
+      p.fort(4, 4, 13, 13, [[8, 4], [9, 4], [8, 13], [9, 13], [4, 8], [4, 9], [13, 8], [13, 9]], true);
+      p.rect(STN, 5, 5, 12, 12); p.pts(34, [[8, 8], [9, 9], [8, 9], [9, 8]]); p.pts(5, [[5, 12], [12, 12]]);
+    },
+    zones: [[0, 0, 17, 2, 3, 1], [0, 15, 17, 17, 3, 1]], lts: []
+  },
+  { // 16 · Hoàng Hôn Sofia: đại lộ dẫn tới cổng thành, hai bên là vực đá có ban công cung thủ
+    ground: STN, floor: 32, mix: [12, 12, 8, 8, 10, 11, 9],
+    paint(p) {
+      p.rect(CLF, 0, 9, 7, 15); p.rect(CLF, 14, 9, 21, 15);
+      p.rect(STN, 2, 11, 6, 14); p.rect(STN, 7, 12, 7, 13); p.rect(STN, 15, 11, 19, 14); p.rect(STN, 14, 12, 14, 13);
+      p.pts(12, [[9, 13], [12, 13], [9, 11], [12, 11]]);
+      p.hwall(8, 0, 21, [10, 11]); p.pts([35, 36], [[0, 8], [21, 8], [9, 8], [12, 8]]);
+      p.hwall(4, 0, 21, [10, 11]); p.pts([35, 36], [[0, 4], [21, 4], [9, 4], [12, 4]]);
+      p.pts(12, [[4, 6], [17, 6], [8, 6], [13, 6]]); p.pts(5, [[1, 17], [20, 17]]);
+    },
+    zones: [[8, 1, 13, 3, 3, 0], [2, 5, 19, 7, 6, 2], [8, 9, 13, 14, 5, 1], [2, 11, 6, 14, 3, 0, [7, 11]], [15, 11, 19, 14, 3, 0, [7, 11]]],
+    lts: [[154, 'Thống Lĩnh Cấm Quân Hale', 12, 2, [12, 41], 9, 2, 0], [155, 'Tế Tư Hắc Ám Veyra', 10, 2, [31, 41], 13, 2, 0], [156, 'Xạ Thủ Hoàng Hôn Idris', 11, 2, [24, 41], 12, 6, 0]]
+  },
+  { // 17 · Hành Trình Tự Do: thảo nguyên mở, dãy núi chéo chia đôi chiến trường, đường mòn dẫn tới trại loạn quân
+    ground: GRS, floor: 25, mix: [5, 5, 7, 12, 9, 6],
+    paint(p) {
+      [[3, 10, 2], [16, 9, 2], [15, 15, 2], [5, 2, 2], [12, 14, 1], [18, 13, 1], [1, 14, 1], [9, 2, 1]].forEach(b => p.blob(3, b[0], b[1], b[2]));
+      for (let i = 0; i < 13; i++) p.set(1 + i, 4 + (i >> 1), i % 4 == 1 ? CLF : 1);
+      p.rect(SND, 6, 11, 7, 17); p.rect(SND, 6, 11, 15, 12); p.rect(SND, 14, 3, 15, 12);
+      p.rect(SND, 11, 1, 18, 5); p.pts(3, [[10, 1], [10, 3], [19, 2], [19, 4], [14, 0], [16, 0]]);
+      p.pts(5, [[2, 15], [17, 14], [9, 3]]);
+    },
+    zones: [[11, 1, 18, 5, 5, 0], [1, 4, 12, 9, 4, 1], [14, 7, 19, 12, 4, 2], [0, 9, 4, 13, 3, 0]],
+    lts: [[157, 'Thủ Lĩnh Loạn Quân Garrick', 9, 2, [21, 41], 15, 2, 0], [158, 'Sát Thủ Rừng Thep', 11, 2, [24, 41], 3, 11, 0]]
+  },
+  { // 18 · Bình Minh Hòa Ước: pháo đài băng hai lớp, đường đá băng giữa hai dãy núi tuyết và trụ băng
+    ground: SND, floor: 30, mix: [12, 8, 10, 11, 6, 9, 10],
+    paint(p) {
+      p.rect([2, 2, 13], 0, 6, 3, 14); p.rect([2, 2, 13], 18, 6, 21, 14);
+      [[5, 12, 2], [16, 12, 2], [3, 17, 2], [18, 18, 2], [10, 16, 1], [7, 8, 1], [14, 8, 1]].forEach(b => p.blob(4, b[0], b[1], b[2]));
+      p.scat(CLF, 8, 4, 10, 17, 19); p.rect(STN, 10, 10, 11, 21);
+      p.fort(5, 1, 16, 9, [[10, 9], [11, 9]], true); p.rect(STN, 6, 2, 15, 8);
+      p.fort(8, 2, 13, 5, [[10, 5], [11, 5]], true); p.rect(STN, 9, 3, 12, 4);
+      p.pts(5, [[2, 16], [19, 16], [7, 6], [14, 6]]);
+    },
+    zones: [[9, 3, 12, 4, 2, 0], [6, 2, 15, 8, 6, 0], [2, 10, 19, 15, 8, 2], [0, 6, 3, 14, 3, 0], [18, 6, 21, 14, 3, 0]],
+    lts: [[159, 'Hắc Long Kỵ Sĩ Draven', 12, 2, [14, 41], 9, 4, 0], [160, 'Pháp Sư Tế Lễ Morwen', 10, 2, [32, 41], 12, 4, 0], [161, 'Cung Thủ Hắc Long Sera', 11, 2, [27, 41], 14, 7, 0]]
   }
+];
+
+function floodM(m, starts) {
+  const ok = new Set(starts.map(p => p[0] + ',' + p[1])), q = starts.slice();
+  while (q.length) {
+    const [x, y] = q.pop();
+    for (const [dx, dy] of DIRS) {
+      const nx = x + dx, ny = y + dy, k = nx + ',' + ny;
+      if (nx < 0 || ny < 0 || nx >= m.w || ny >= m.h || ok.has(k) || tCost(m.t[ny * m.w + nx]) >= 9) continue;
+      ok.add(k); q.push([nx, ny]);
+    }
+  }
+  return ok;
+}
+
+function mkLt(s, lv, x, y) { // tướng lĩnh: mạnh hơn lính thường, có tên riêng
+  const u = spawn(s[2], lv + s[3], 2, x, y, s[0], s[4], 'lt');
+  u.name = s[1]; u.lt = 1; u.ai = s[7] == null ? 1 : s[7];
+  u.str += 2; u.skl += 2; u.def += 1; u.spd += 1;
+  return u;
+}
+
+function buildGen(i) {
+  const g = GEN[i], L = LAY[i];
+  seed = g.seed;
+  const B = brush(g.w, g.h, L.ground), m = { w: g.w, h: g.h, t: B.t };
+  L.paint(B);
+  const dep = L.dep || [3, g.h - 3, 10, 3], pos = [];
+  for (let r = 0; r < dep[3]; r++) for (let c = 0; c < dep[2]; c++) {
+    const x = dep[0] + c, y = dep[1] + r, k = y * m.w + x;
+    if (tCost(m.t[k]) >= 9 || m.t[k] === 5) m.t[k] = L.floor;
+    pos.push([x, y]);
+  }
+  const ok = floodM(m, pos), U2 = [], free = (x, y) => freeNearM(m, x, y, U2, ok);
+  seed = g.seed + 99;
   if (g.boss) {
-    const b = g.boss, bp = freeNearM(m, b.pos[0], b.pos[1], U2);
+    const b = g.boss, bp = free(b.pos[0], b.pos[1]);
     const bs = spawn(b.job, b.lv, 2, bp[0], bp[1], b.id, b.items, true);
     bs.name = NEWN[b.id] || 'Chỉ Huy Địch';
-    bs.str += 3; bs.def += 2; bs.skl += 4; bs.ai = 1;
+    bs.str += 3; bs.def += 2; bs.skl += 4; bs.ai = 2; bs.boss = true;
     U2.push(bs);
   }
-  const pos = [];
-  for (let r = 0; r < 3; r++) for (let c = 0; c < 10; c++) pos.push([3 + c, g.h - 3 + r]);
+  L.lts.forEach(s => { const p = free(s[5], s[6]); U2.push(mkLt(s, g.lv + 2, p[0], p[1])); });
+  let id = 110;
+  L.zones.forEach(z => {
+    for (let k = 0; k < z[4]; k++) {
+      const jl = z[6] || L.mix, j = jl[srnd(jl.length)];
+      const p = free(z[0] + srnd(z[2] - z[0] + 1), z[1] + srnd(z[3] - z[1] + 1));
+      const e = spawn(j, g.lv + srnd(3), 2, p[0], p[1], id++, WSJ[j].concat(srnd(3) === 0 ? [41] : []), false);
+      e.ai = z[5] === 2 ? k % 2 : z[5];
+      U2.push(e);
+    }
+  });
+  g.spawns = L.spawns; g.caps = L.caps;
   return { m, U: U2, pos };
 }
 
-function freeNearM(m, x, y, list) {
-  for (let r = 0; r < 9; r++) {
+function freeNearM(m, x, y, list, ok) { // ô trống gần nhất (đi được, không phải làng, nối thông với vùng triển khai)
+  for (let r = 0; r < 26; r++) {
     for (let dx = -r; dx <= r; dx++) {
-      for (let dy = -r; dy <= r; dy++) {
-        const nx = clamp(x + dx, 0, m.w - 1), ny = clamp(y + dy, 0, m.h - 1);
+      const rest = r - Math.abs(dx);
+      for (const dy of rest ? [rest, -rest] : [0]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= m.w || ny >= m.h) continue;
         const t = m.t[ny * m.w + nx];
-        if ((t < 6 || t > 20) && t !== 0 && !list.some(u => u.x === nx && u.y === ny)) {
-          return [nx, ny];
-        }
+        if (tCost(t) < 9 && t !== 5 && (!ok || ok.has(nx + ',' + ny)) && !list.some(u => u.x === nx && u.y === ny)) return [nx, ny];
       }
     }
   }
   return [x, y];
+}
+
+/* ===== CHỦ TƯỚNG & TƯỚNG LĨNH: cộng chỉ số theo quân mạnh nhất phe ta ===== */
+const powOf = u => Math.max(u.str, u.mag) * 2 + u.skl + u.spd + u.def + u.lck + (u.mhp >> 1);
+const strongestAlly = () => G.roster.reduce((a, u) => powOf(u) > powOf(a) ? u : a, G.roster[0]);
+function bossBoost(u, top) {
+  if (!top) return;
+  const r = u.boss ? 0.75 : 0.5, flat = u.boss ? 1 : 0; // Chủ tướng bắt kịp 75% chênh lệch +1, tướng lĩnh bắt kịp 50%
+  ['str', 'mag', 'skl', 'spd', 'def', 'lck'].forEach(k => { if (top[k] > u[k]) u[k] += Math.ceil((top[k] - u[k]) * r) + flat; });
+  if (top.mhp > u.mhp) u.mhp += Math.ceil((top.mhp - u.mhp) * r) + (u.boss ? 4 : 0);
+  u.hp = u.mhp;
+}
+const LTN = ['Đội Trưởng Brogan', 'Phó Tướng Hakon', 'Cận Vệ Varro', 'Hộ Quân Ulric', 'Thống Binh Dagan', 'Kiếm Sĩ Rheos', 'Đại Úy Falk', 'Xạ Trưởng Orin'];
+function promoteElites(k) { // chương tuyến chính: nâng những lính mạnh nhất lên làm tướng lĩnh
+  const pw = u => u.lv * 3 + u.mhp + Math.max(u.str, u.mag);
+  en().filter(u => !u.boss && wpn(u) && !isSup(u.job) && u.ai !== 2).sort((a, b) => pw(b) - pw(a)).slice(0, k).forEach((u, n) => {
+    u.lt = 1; u.name = LTN[(G.ch + n * 3) % LTN.length];
+    u.mhp += 8; u.hp = u.mhp; u.str += 2; u.skl += 2; u.def += 1;
+  });
+}
+function setTact(u) { // mỗi tên địch có lối đánh riêng: cận chiến, bọc sườn, xông pha hay bắn xa
+  const mr = Math.max(0, ...weapons(u).map(w => iS(w.id)[4]));
+  u.tact = mr >= 2 ? 'ranged' : (u.mov >= 6 || rnd(100) < 25) ? 'flank' : rnd(100) < 25 ? 'rush' : 'line';
+  if (u.boss || u.ai === 2) u.home = [u.x, u.y];
 }
 
 /* ============================================================
@@ -2249,7 +2442,7 @@ let CURRENT_TAB = 'unit';
 const terr = (x, y) => {
   if (!MAP) return 0;
   const t = MAP.t[y * MAP.w + x];
-  return t == 0 ? 4 : t < 3 ? 5 : t < 5 ? 6 : t == 5 ? 7 : t < 10 ? 8 : t < 12 ? 2 : t < 21 ? 8 : t < 30 ? 3 : t < 32 ? 1 : t < 35 ? 2 : 8;
+  return terrOf(t);
 };
 const inb = (x, y) => MAP && x >= 0 && y >= 0 && x < MAP.w && y < MAP.h;
 const at = (x, y) => U.find(u => u.hp > 0 && u.x == x && u.y == y);
@@ -2294,7 +2487,7 @@ function spawn(job, lv, team, x, y, id, items, boss) {
   const u = { id, job, lv, team, x, y, exp: 0, ai: 1, done: false, mask: MASKJ[job] };
   const f = (i, v) => Math.max(0, c[i] + Math.floor(g[i] * lv / 100) + v);
   u.str = f(0, 0); u.skl = f(1, 0); u.spd = f(2, 0); u.def = f(3, 0); u.mag = f(4, 0); u.lck = f(5, 0);
-  u.mhp = f(6, 0) + (boss ? 12 : 0); u.hp = u.mhp; u.mov = c[7];
+  u.mhp = f(6, 0) + (boss === true ? 12 : boss ? 6 : 0); u.hp = u.mhp; u.mov = c[7];
   u.inv = items.map(i => ({ id: i, u: iS(i)[6] }));
   u.name = uname(id, team);
   return u;
@@ -2643,7 +2836,8 @@ function freeNear(x, y) {
 function edgeSpawn(job, lv, n, items) {
   const o = [];
   for (let i = 0; i < n; i++) {
-    const p = freeNear(rnd(MAP.w), Math.random() < 0.5 ? 0 : MAP.h - 1);
+    const sp = CHAP && CHAP.spawns && CHAP.spawns.length ? CHAP.spawns[rnd(CHAP.spawns.length)] : null;
+    const p = sp ? freeNear(sp[0], sp[1]) : freeNear(rnd(MAP.w), Math.random() < 0.5 ? 0 : MAP.h - 1);
     const u = spawn(job, lv, 2, p[0], p[1], 110 + rnd(10), items);
     u.name = 'Quân Tiếp Viện';
     U.push(u); o.push(u);
@@ -2760,14 +2954,14 @@ async function startChap(i) {
 
   const dd = G.diff;
   const bossId = (CHAP.boss && CHAP.boss.id) || BOSS[i];
+  U.forEach(u => { if (u.team == 2 && (u.id == bossId || (u.id >= 96 && u.id <= 106))) u.boss = true; });
+  if (i >= 2 && i < 10) promoteElites(i < 5 ? 1 : 2);
+  const top = strongestAlly();
   U.forEach(u => {
     if (u.team == 2) {
-      // Hạ nhiệt trùm (Desai & các boss chính): bớt máu, bớt sát thương, bớt chí mạng
-      if (u.id == bossId || (u.id >= 96 && u.id <= 106)) {
-        u.mhp = Math.max(10, Math.floor(u.mhp * 0.8));
-        u.str = Math.max(0, u.str - 2); u.def = Math.max(0, u.def - 2);
-        u.skl = Math.max(0, u.skl - 3); u.spd = Math.max(0, u.spd - 1);
-      }
+      setTact(u);
+      // Chủ tướng & tướng lĩnh: nếu quân mạnh nhất phe ta có chỉ số cao hơn thì họ được cộng thêm chỉ số tương ứng
+      if (u.boss || u.lt) bossBoost(u, top);
       if (dd == 0) { u.mhp = Math.max(5, Math.floor(u.mhp * 0.85)); u.str = Math.max(0, u.str - 1); }
       if (dd == 2) { u.mhp = Math.ceil(u.mhp * 1.25); u.str += 2; u.def += 1; u.skl += 2; }
       u.hp = u.mhp;
@@ -2820,8 +3014,14 @@ async function playerStart() {
     const jb = [5, 6, 7, 8, 9, 10, 11, 12][rnd(8)];
     edgeSpawn(jb, avgLv() + Math.floor(TURN / 3), 2 + Math.floor(TURN / 4), WSJ[jb]);
     log('{{warn}} Đợt quân địch thứ ' + (TURN / 2) + ' tràn vào thành!');
+    if (CHAP.caps && CHAP.caps[TURN] && CHAP.spawns) CHAP.caps[TURN].forEach(c => {
+      const sp = CHAP.spawns[rnd(CHAP.spawns.length)], p = freeNear(sp[0], sp[1]), u = mkLt(c, avgLv() + 2, p[0], p[1]);
+      U.push(u); setTact(u); bossBoost(u, strongestAlly());
+      log('{{skull}} ' + u.name + ' dẫn quân tràn vào!');
+    });
   }
 
+  if (TURN === 1) { const ls = en().filter(u => u.lt); if (ls.length) log('{{crown}} Địch có ' + ls.length + ' tướng lĩnh (dấu ◆ trắng): ' + ls.map(u => u.name).join(', ') + '.'); }
   await rollEvent();
   hud(); menu();
 }
@@ -2842,8 +3042,10 @@ async function enemyPhase() {
   hud(); menu();
   log('— Lượt quân địch —');
   await wait(800);
+  AI.reset();
 
-  const order = U.filter(u => u.hp > 0 && u.team != 0).sort((a, b) => a.team - b.team);
+  // Quân cận chiến ra trước, cung/pháp theo sau, chủ tướng hành động sau cùng để thấy rõ thế trận
+  const order = U.filter(u => u.hp > 0 && u.team != 0).sort((a, b) => a.team - b.team || (a.boss ? 1 : 0) - (b.boss ? 1 : 0) || (a.tact == 'ranged' ? 1 : 0) - (b.tact == 'ranged' ? 1 : 0));
   for (const e of order) {
     if (e.hp <= 0) continue;
     await aiAct(e);
@@ -2858,25 +3060,121 @@ async function enemyPhase() {
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
-async function aiAct(e) {
-  const w = wpn(e);
-  if (!w) return;
-  const foes = U.filter(o => o.hp > 0 && hostile(o, e));
-  if (!foes.length) return;
+/* ============================================================
+   AI ĐỊCH v2 — tìm đường thật (né tường/vực), tính vùng đe doạ của phe ta, chờ đồng đội rồi mới xông,
+   bọc sườn kẻ yếu, cung/pháp đứng xa, chủ tướng giữ vị trí, kẻ yếu máu biết uống thuốc, có chút ngẫu nhiên để khó đoán
+   ============================================================ */
+const AI = {
+  T: [null, null], n: [0, 0],
+  reset() { this.T = [null, null]; },
+  build(sd, foes) { // với mỗi quân đối phương: tập ô mà nó có thể đánh tới trong lượt sau
+    this.T[sd] = [];
+    for (const f of foes) {
+      const ws = weapons(f);
+      if (!ws.length) continue;
+      const tiles = new Map();
+      for (const k of reach(f).keys()) {
+        const [x, y] = k.split(',').map(Number);
+        for (const w of ws) for (const t of atkTiles(f, x, y, w)) { const o = tiles.get(t); if (!o || iS(w.id)[0] > iS(o.id)[0]) tiles.set(t, w); }
+      }
+      this.T[sd].push({ f, tiles });
+    }
+  },
+  danger(sd, e, x, y, skip) { // sát thương kỳ vọng e phải nhận nếu đứng ở (x, y) khi tới lượt đối phương
+    const k = x + ',' + y, eas = BalanceSystem.calcAS(e, wpn(e)), av = e.lck + AVO[terr(x, y)];
+    let s = 0;
+    for (const t of this.T[sd] || []) {
+      const w = t.tiles.get(k);
+      if (!w || t.f === skip || t.f.hp <= 0) continue;
+      const hit = clamp(t.f.skl * 3 + iS(w.id)[1] - (eas * 2 + av), 5, 95);
+      s += dmgR(t.f, w, e, false) * hit / 100 * (BalanceSystem.calcAS(t.f, w) - eas >= 5 ? 2 : 1);
+    }
+    return s;
+  },
+  field(src, e, pen) { // khoảng cách đường đi thật từ src tới mọi ô (quân địch của e chắn đường bị tính thêm chi phí)
+    const d = new Map([[src.x + ',' + src.y, 0]]), q = [[src.x, src.y, 0]];
+    while (q.length) {
+      q.sort((a, b) => a[2] - b[2]);
+      const [x, y, c] = q.shift();
+      if (d.get(x + ',' + y) < c) continue;
+      for (const [dx, dy] of DIRS) {
+        const nx = x + dx, ny = y + dy;
+        if (!inb(nx, ny) || COST[terr(nx, ny)] >= 9) continue;
+        const o = at(nx, ny), nc = c + COST[terr(nx, ny)] + (o && o !== src && hostile(o, e) ? 4 : 0) + (pen ? pen(nx, ny) : 0), k = nx + ',' + ny;
+        if (d.has(k) && d.get(k) <= nc) continue;
+        d.set(k, nc); q.push([nx, ny, nc]);
+      }
+    }
+    return d;
+  },
+  goal(e, foes, dE) { // chọn mục tiêu để tiến tới: gần (theo đường thật) nhưng ưu tiên thủ lĩnh, kẻ yếu, kẻ lẻ loi
+    let best = null, bs = 1e9;
+    for (const f of foes) {
+      const k = f.x + ',' + f.y;
+      if (!dE.has(k)) continue;
+      let s = dE.get(k);
+      if (f.id == 0) s -= 5;
+      if (isSup(f.job)) s -= 4;
+      if (e.tact == 'flank' && (f.def <= 6 || (wpn(f) && iS(wpn(f).id)[4] > 1))) s -= 6;
+      if (f.hp < f.mhp * 0.5) s -= 3;
+      if (!foes.some(o => o !== f && dist(o, f) <= 2)) s -= 3;
+      s += rnd(100) / 65;
+      if (s < bs) { bs = s; best = f; }
+    }
+    return best;
+  }
+};
 
-  const rc = reach(e);
+async function aiAct(e) {
+  const w = wpn(e), foes = U.filter(o => o.hp > 0 && hostile(o, e));
+  if (!w || !foes.length) return;
+  const sd = e.team == 2 ? 0 : 1;
+  if (!AI.T[sd] || AI.n[sd] !== foes.length) { AI.build(sd, foes); AI.n[sd] = foes.length; }
+  const allies = U.filter(o => o.hp > 0 && o !== e && !hostile(o, e));
+  const mr = Math.max(...weapons(e).map(x => iS(x.id)[4]));
+  const hold = !!(e.boss || e.ai === 2), home = e.home || [e.x, e.y];
+  const near = Math.min(...foes.map(f => dist(e, f)));
+  const threatened = AI.danger(sd, e, e.x, e.y) > 0;
+  const trig = e.ai === 1 || near <= e.mov + mr + 2 || threatened || e.hp < e.mhp;
+  if (hold && (trig || near <= e.mov + mr + 3)) e.alert = true;
+  if (!hold && e.ai === 0 && trig) { // một tên bị đánh thức thì đồng đội quanh đó cũng tỉnh theo
+    e.ai = 1;
+    allies.forEach(o => { if (o.team == 2 && o.ai === 0 && dist(o, e) <= 3) o.ai = 1; });
+  }
+
+  // Bị thương nặng giữa vòng vây: uống thuốc thay vì đánh liều
+  const pot = e.inv.find(i => i.id == 42 || i.id == 60 || i.id == 41);
+  if (pot && threatened && e.hp <= e.mhp * 0.4) {
+    useItem(e, pot); pot.u--;
+    if (pot.u <= 0) e.inv.splice(e.inv.indexOf(pot), 1);
+    CUR = { x: e.x, y: e.y };
+    await wait(650);
+    return;
+  }
+
+  const rc = reach(e), lonely = !allies.some(o => dist(o, e) <= 5);
+  const hl = hold ? ((lonely || TURN >= 10 || e.hp < e.mhp * 0.6) ? 99 : 4) : 99; // chủ tướng không rời trận địa quá xa
+  const tiles = [...rc.keys()].map(k => k.split(',').map(Number)).filter(p => (p[0] == e.x && p[1] == e.y) || Math.abs(p[0] - home[0]) + Math.abs(p[1] - home[1]) <= hl);
+  const hurt = e.hp < e.mhp * 0.5 ? 1.8 : 1, calm = TURN >= 8 ? 0.5 : 1; // càng về sau càng liều để không dây dưa
+  const rw = hold ? 0.7 : e.tact == 'ranged' ? 0.55 : e.tact == 'rush' ? 0.15 : 0.32;
+
   let best = null, bs = -1e9;
-  for (const [k, c] of rc) {
-    const [x, y] = k.split(',').map(Number);
-    const save = [e.x, e.y];
+  for (const [x, y] of tiles) {
+    const sv = [e.x, e.y];
     e.x = x; e.y = y;
     for (const d of targets(e, x, y)) {
-      const f = forecast(e, d);
-      let sc = f.dmg * f.hit / 100 + (d.hp <= f.dmg ? 70 : 0) + (d.id == 0 ? 30 : 0) - (f.counter ? f.ddmg * f.dhit / 100 * 0.7 : 0) + AVO[terr(x, y)] / 6;
-      if (isSup(d.job)) sc += 20;
+      const f = forecast(e, d), dm = f.dmg * (f.dbl ? 2 : 1), kill = dm >= d.hp;
+      let sc = dm * f.hit / 100 + (kill ? 55 * f.hit / 100 : 0) + (1 - d.hp / d.mhp) * 10 + Math.max(0, 9 - d.def) * 0.7;
+      if (d.id === 0) sc += kill ? 900 : 30;
+      if (isSup(d.job)) sc += 18;
+      if (f.counter) { const cd = f.ddmg * (f.ddbl ? 2 : 1); sc -= cd * f.dhit / 100 * 0.9; if (!kill && cd >= e.hp) sc -= 60; }
+      else sc += 6; // đánh mà không bị phản đòn
+      const risk = AI.danger(sd, e, x, y, d);
+      sc -= risk * rw * hurt * calm + (risk >= e.hp && !(kill && d.id === 0) ? 25 : 0);
+      sc += AVO[terr(x, y)] / 4 + (e.tact == 'ranged' ? dist(e, d) * 1.5 : 0) + Math.min(3, allies.filter(o => dist(o, { x, y }) <= 2).length) * 1.2 + rnd(100) / 60;
       if (sc > bs) { bs = sc; best = { x, y, d }; }
     }
-    e.x = save[0]; e.y = save[1];
+    e.x = sv[0]; e.y = sv[1];
   }
 
   const go = async (x, y) => {
@@ -2886,17 +3184,22 @@ async function aiAct(e) {
     await moveAnim(e, p);
   };
 
-  if (!best) {
-    const near = foes.reduce((m, o) => dist(e, o) < dist(e, m) ? o : m);
-    const aggro = e.ai == 1 || dist(e, near) <= e.mov + iS(w.id)[4] + 3;
-    if (!aggro) return;
-    let bt = null, bd = dist(e, near);
-    for (const [k] of rc) {
-      const [x, y] = k.split(',').map(Number);
-      const d = Math.abs(x - near.x) + Math.abs(y - near.y);
-      if (d < bd) { bd = d; bt = { x, y }; }
+  if (!best || (bs < -30 && e.tact !== 'rush')) { // không có đòn đáng đánh: tiến thế, bọc sườn hoặc giữ chỗ
+    if (!trig || (hold && !e.alert)) return;
+    const dE = AI.field(e, e), tg = AI.goal(e, foes, dE);
+    if (!tg) return;
+    const dT = AI.field(tg, e, e.tact == 'flank' ? (x, y) => Math.min(5, AI.danger(sd, e, x, y) / 5) : null); // kẻ bọc sườn tránh đường đông địch
+    const rk = hold ? 0.5 : e.tact == 'rush' ? 0.06 : e.tact == 'ranged' ? 0.5 : e.tact == 'flank' ? 0.28 : 0.25;
+    let bt = null, bv = 1e9;
+    for (const [x, y] of tiles) {
+      const dd = dT.get(x + ',' + y);
+      if (dd === undefined) continue;
+      const na = allies.filter(o => dist(o, { x, y }) <= 3).length, risk = AI.danger(sd, e, x, y);
+      let v = dd * 3 + risk * rk * hurt * calm - Math.min(na, 3) * 1.2 - AVO[terr(x, y)] / 8 + rnd(100) / 40;
+      if (risk > 0 && na === 0 && e.tact !== 'rush') v += 6; // không một mình lao vào vùng nguy hiểm
+      if (v < bv) { bv = v; bt = [x, y]; }
     }
-    if (bt) await go(bt.x, bt.y);
+    if (bt) await go(bt[0], bt[1]);
     return;
   }
 
@@ -3586,6 +3889,7 @@ const WA = [[3,3,1,9],[2,2,0,8],[7,7,5,9],[6,6,4,8],[14,14,10,12],[13,13,10,11]]
 const WB = [[4,15,4,16,0,1,24,6],[3,14,4,15,0,1,26,9],[0,9,0,10,0,0,24,4],[2,16,2,17,2,3,25,7]];
 
 function headZ(u) {
+  if (u.lt) return 8 + (u.id % 5);
   const i = u.id, m = { 0: 0, 1: 3, 2: 8, 3: 1, 4: 9, 5: 2, 6: 10, 7: 11, 8: 12, 10: 7, 11: 1, 12: 10, 13: 11, 14: 2, 97: 5, 98: 5, 100: 4 };
   if (i in m) return m[i];
   if (i >= 101 && i <= 104) return 6 + (i % 2);
@@ -3662,6 +3966,13 @@ function drawUnit(u, ts) {
     if (wi && wi.width) cx.drawImage(wi, e ? ox + T - B[ph * 2] - wi.width : bx + B[ph * 2], bot - 37 + B[ph * 2 + 1]);
   }
   cx.restore();
+  if (!dead && (u.boss || u.lt)) { // dấu ◆ vàng = chủ tướng, ◆ trắng = tướng lĩnh
+    cx.save(); cx.filter = 'none';
+    const mx = ox + 5, my = oy + 5;
+    cx.fillStyle = u.boss ? '#f5cb5c' : '#f3f4f6'; cx.strokeStyle = '#7a1d1d'; cx.lineWidth = 1.2;
+    cx.beginPath(); cx.moveTo(mx, my - 4); cx.lineTo(mx + 4, my); cx.lineTo(mx, my + 4); cx.lineTo(mx - 4, my); cx.closePath(); cx.fill(); cx.stroke();
+    cx.restore();
+  }
 }
 
 function draw(ts) {
